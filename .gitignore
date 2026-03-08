@@ -1,0 +1,3 @@
+# Исключенные пути проекта
+/node_modules/gsap/src/SplitText.js
+/node_modules/tailwindcss/stubs/tailwind.config.cjs

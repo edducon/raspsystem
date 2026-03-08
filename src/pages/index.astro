@@ -1,0 +1,74 @@
+---
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+import StudentBoard from '../components/StudentBoard.vue';
+import { db } from '../db';
+import { retakes, retakeTeachers, teachersLocal } from '../db/schema';
+import { RaspyxAPI } from '../lib/api-client';
+import { eq, inArray } from 'drizzle-orm';
+
+let apiGroups = [];
+let apiSubjects = [];
+try {
+    const [gRes, sRes] = await Promise.all([ RaspyxAPI.getGroups(), RaspyxAPI.getSubjects() ]);
+    if (gRes?.result) apiGroups = gRes.result;
+    if (sRes?.result) apiSubjects = sRes.result;
+} catch (e) {}
+
+const allRetakes = await db.select().from(retakes);
+const retakeIds = allRetakes.map(r => r.id);
+let teachersMap: Record<number, {name: string, role: string}[]> = {};
+
+if (retakeIds.length > 0) {
+    const relations = await db
+        .select({
+            retakeId: retakeTeachers.retakeId,
+            fullName: teachersLocal.fullName,
+            role: retakeTeachers.role
+        })
+        .from(retakeTeachers)
+        .leftJoin(teachersLocal, eq(retakeTeachers.teacherUuid, teachersLocal.uuid))
+        .where(inArray(retakeTeachers.retakeId, retakeIds));
+
+    relations.forEach(rel => {
+        if (!teachersMap[rel.retakeId]) teachersMap[rel.retakeId] = [];
+        if (rel.fullName && rel.role) {
+            teachersMap[rel.retakeId].push({ name: rel.fullName, role: rel.role });
+        }
+    });
+}
+
+const formattedRetakes = allRetakes.map(r => ({
+    id: r.id,
+    groupUuid: r.groupUuid,
+    groupName: apiGroups.find((g: any) => g.uuid === r.groupUuid)?.number || 'Неизвестная группа',
+    subjectName: apiSubjects.find((s: any) => s.uuid === r.subjectUuid)?.name || 'Неизвестный предмет',
+    date: r.date,
+    timeSlots: r.timeSlots,
+    room: r.roomUuid,
+    link: r.link,
+    attemptNumber: r.attemptNumber,
+    teachers: teachersMap[r.id] || []
+}));
+---
+
+<Layout title="Расписание ликвидации задолженностей">
+    <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center font-bold text-lg rounded-md">П</div>
+                <div class="font-medium text-slate-900 dark:text-white">Расписание пересдач</div>
+            </div>
+            <a href="/login" class="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium transition-colors">
+                Вход для сотрудников
+            </a>
+        </div>
+    </header>
+
+    <main class="min-h-screen py-10 px-4 sm:px-6 lg:px-8 bg-slate-50/50 dark:bg-slate-950 flex flex-col">
+        <div class="flex-grow">
+            <StudentBoard client:load groups={apiGroups} retakes={formattedRetakes} />
+        </div>
+    </main>
+</Layout>

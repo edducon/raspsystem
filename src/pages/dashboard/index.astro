@@ -1,0 +1,178 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import RetakeScheduler from '../../components/RetakeScheduler.vue';
+import TeacherBoard from '../../components/TeacherBoard.vue';
+import { db } from '../../db';
+import { teachersLocal, users, retakes, retakeTeachers } from '../../db/schema';
+import { RaspyxAPI } from '../../lib/api-client';
+import { eq } from 'drizzle-orm';
+
+export const prerender = false;
+
+if (!Astro.locals.session) {
+    return Astro.redirect('/login');
+}
+
+const sessionUser = Astro.locals.user;
+const [dbUser] = await db.select().from(users).where(eq(users.id, sessionUser.id));
+
+const isAdmin = dbUser.role === 'ADMIN';
+const isEmployee = dbUser.role === 'EMPLOYEE';
+const isTeacher = dbUser.role === 'TEACHER';
+
+const canSchedule = isAdmin || isEmployee;
+const hasOwnSchedule = !!dbUser.teacherUuid;
+
+const urlTab = Astro.url.searchParams.get('tab');
+const defaultTab = hasOwnSchedule ? 'schedule' : 'retakes';
+const activeTab = urlTab || defaultTab;
+
+let apiGroups = [];
+let apiSubjects = [];
+let localTeachers = [];
+
+if (canSchedule) {
+    try {
+        const groupsRes = await RaspyxAPI.getGroups();
+        const subjectsRes = await RaspyxAPI.getSubjects();
+        if (groupsRes?.result) apiGroups = groupsRes.result;
+        if (subjectsRes?.result) apiSubjects = subjectsRes.result;
+    } catch (e) {
+        console.error("Ошибка загрузки справочников API", e);
+    }
+    localTeachers = await db.select().from(teachersLocal).orderBy(teachersLocal.fullName);
+}
+
+let teacherRetakesFormatted = [];
+let teacherBaseSchedule = null;
+let teacherFullName = '';
+
+if (hasOwnSchedule) {
+    const [tLocal] = await db.select().from(teachersLocal).where(eq(teachersLocal.uuid, dbUser.teacherUuid));
+    if (tLocal) {
+        teacherFullName = tLocal.fullName;
+        try {
+            const schedRes = await RaspyxAPI.getTeacherSchedule(teacherFullName);
+            if (schedRes?.result) teacherBaseSchedule = schedRes.result;
+        } catch (e) {
+            console.error("Ошибка загрузки расписания преподавателя", e);
+        }
+    }
+
+    const myRetakes = await db.select({
+        id: retakes.id,
+        groupUuid: retakes.groupUuid,
+        subjectUuid: retakes.subjectUuid,
+        date: retakes.date,
+        timeSlots: retakes.timeSlots,
+        room: retakes.roomUuid,
+        link: retakes.link,
+        attemptNumber: retakes.attemptNumber,
+        myRole: retakeTeachers.role
+    })
+        .from(retakes)
+        .innerJoin(retakeTeachers, eq(retakes.id, retakeTeachers.retakeId))
+        .where(eq(retakeTeachers.teacherUuid, dbUser.teacherUuid));
+
+    try {
+        const groupsRes = await RaspyxAPI.getGroups();
+        const subjectsRes = await RaspyxAPI.getSubjects();
+        const groups = groupsRes?.result || [];
+        const subjects = subjectsRes?.result || [];
+
+        teacherRetakesFormatted = myRetakes.map(r => ({
+            ...r,
+            groupName: groups.find((g: any) => g.uuid === r.groupUuid)?.number || 'Неизвестная группа',
+            subjectName: subjects.find((s: any) => s.uuid === r.subjectUuid)?.name || 'Неизвестный предмет',
+        }));
+    } catch (e) {}
+}
+
+let roleBadge = 'ПРЕПОДАВАТЕЛЬ';
+let roleClass = 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300';
+
+if (isAdmin) {
+    roleBadge = 'АДМИН';
+    roleClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400';
+} else if (isEmployee) {
+    roleBadge = 'СОТРУДНИК КАФЕДРЫ (ДИСПЕТЧЕР)';
+    roleClass = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400';
+}
+---
+
+<Layout title="Рабочий стол">
+    <main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 flex flex-col">
+        <div class="max-w-7xl mx-auto w-full flex-grow">
+
+            <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Рабочий стол</h1>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400 flex items-center flex-wrap gap-2">
+                        <span>Пользователь: <span class="font-bold">{dbUser?.username}</span></span>
+                        <span class={`px-2.5 py-0.5 rounded-md text-xs font-bold ${roleClass}`}>
+                            {roleBadge}
+                        </span>
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    {isAdmin && (
+                            <a href="/admin" class="text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/50 border border-indigo-100 dark:border-indigo-800/50 py-2.5 px-4 rounded-xl shadow-sm transition-colors">
+                                Админка
+                            </a>
+                    )}
+                    <a href="/profile" class="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-4 rounded-xl shadow-sm transition-colors">
+                        Профиль
+                    </a>
+                    <button id="logout-btn" class="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-4 rounded-xl shadow-sm transition-colors">
+                        Выйти
+                    </button>
+                </div>
+            </div>
+
+            {(hasOwnSchedule && canSchedule) && (
+                    <div class="mb-6 flex p-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-max border border-slate-200 dark:border-slate-700/50">
+                        <a href="?tab=schedule" class={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'schedule' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                            Моё расписание
+                        </a>
+                        <a href="?tab=retakes" class={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'retakes' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                            Назначение пересдач
+                        </a>
+                    </div>
+            )}
+
+            {(activeTab === 'retakes' && canSchedule) && (
+                    <RetakeScheduler
+                            client:load
+                            groups={apiGroups}
+                            subjects={apiSubjects}
+                            teachers={localTeachers}
+                            currentUser={{
+                                id: dbUser.id,
+                                role: dbUser.role,
+                                departmentIds: dbUser.departmentIds
+                            }}
+                    />
+            )}
+
+            {(activeTab === 'schedule' && hasOwnSchedule) && (
+                    <TeacherBoard
+                            client:load
+                            teacherFullName={teacherFullName}
+                            retakes={teacherRetakesFormatted}
+                            baseSchedule={teacherBaseSchedule}
+                    />
+            )}
+
+        </div>
+    </main>
+
+    <script>
+        import { actions } from 'astro:actions';
+        const logoutBtn = document.querySelector('#logout-btn');
+        logoutBtn?.addEventListener('click', async () => {
+            await actions.auth.logout();
+            window.location.href = '/';
+        });
+    </script>
+</Layout>

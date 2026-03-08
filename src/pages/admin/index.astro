@@ -1,0 +1,57 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import AdminManager from '../../components/AdminManager.vue';
+import { db } from '../../db';
+import { teachersLocal, departments, users } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+export const prerender = false;
+
+if (!Astro.locals.session) {
+    return Astro.redirect('/login');
+}
+
+const sessionUser = Astro.locals.user;
+if (sessionUser?.role !== 'ADMIN') {
+    return Astro.redirect('/dashboard');
+}
+
+// 1. Получаем все кафедры для выпадающих списков
+const allDepartments = await db.select().from(departments).orderBy(departments.name);
+
+// 2. Получаем всех преподавателей + проверяем, создан ли у них профиль
+const allTeachers = await db.select({
+    uuid: teachersLocal.uuid,
+    fullName: teachersLocal.fullName,
+    departmentIds: teachersLocal.departmentIds,
+    hasProfile: sql<boolean>`${users.id} IS NOT NULL`.as('has_profile'),
+    userRole: users.role
+})
+    .from(teachersLocal)
+    .leftJoin(users, eq(teachersLocal.uuid, users.teacherUuid))
+    .orderBy(teachersLocal.fullName);
+---
+
+<Layout title="Управление системой (Админ)">
+    <main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+
+            <div class="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Панель администратора</h1>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Управление сотрудниками и справочниками кафедр</p>
+                </div>
+                <a href="/dashboard" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-5 rounded-xl shadow-sm transition-colors">
+                    ← На главную
+                </a>
+            </div>
+
+            <AdminManager
+                    client:load
+                    teachers={allTeachers}
+                    departments={allDepartments}
+            />
+
+        </div>
+    </main>
+</Layout>

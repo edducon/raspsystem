@@ -1,0 +1,153 @@
+---
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+import { db } from '../db';
+import { users, teachersLocal, departments } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
+
+const user = Astro.locals.user;
+if (!user) {
+    return Astro.redirect('/login');
+}
+
+const [profileData] = await db.select({
+    username: users.username,
+    role: users.role,
+    fullName: teachersLocal.fullName,
+    departmentIds: teachersLocal.departmentIds
+})
+    .from(users)
+    .leftJoin(teachersLocal, eq(users.teacherUuid, teachersLocal.uuid))
+    .where(eq(users.id, user.id));
+
+let userDepartmentsNames: string[] = [];
+if (profileData?.departmentIds && profileData.departmentIds.length > 0) {
+    const depts = await db.select({ name: departments.name })
+        .from(departments)
+        .where(inArray(departments.id, profileData.departmentIds));
+
+    userDepartmentsNames = depts.map(d => d.name);
+}
+
+const displayName = profileData?.fullName || (profileData?.role === 'ADMIN' ? 'Главный Администратор' : 'Сотрудник');
+const initial = displayName.charAt(0).toUpperCase();
+---
+
+<Layout title="Профиль сотрудника">
+    <main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-3xl mx-auto">
+
+            <div class="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Личный кабинет</h1>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Управление учетной записью и безопасностью</p>
+                </div>
+                <a href="/dashboard" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-5 rounded-xl shadow-sm transition-colors">
+                    ← На главную
+                </a>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
+
+                <div class="p-6 sm:p-10 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+
+                    <div class="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-4xl font-bold shadow-md shrink-0">
+                        {initial}
+                    </div>
+
+                    <div class="text-center sm:text-left flex-1">
+                        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-2">{displayName}</h2>
+
+                        <div class="flex flex-wrap justify-center sm:justify-start gap-2 mb-5">
+                            {userDepartmentsNames.length > 0 ? (
+                                userDepartmentsNames.map(dept => (
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-sm font-medium">
+                                        {dept}
+                                    </span>
+                                ))
+                            ) : (
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium">
+                                    Кафедры не назначены
+                                </span>
+                            )}
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-center sm:justify-start gap-4 sm:gap-8 text-sm text-slate-500 dark:text-slate-400">
+                            <div>
+                                <span class="block text-xs uppercase tracking-wider mb-1 opacity-70">Логин для входа</span>
+                                <span class="font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{profileData?.username}</span>
+                            </div>
+                            {profileData?.role === 'ADMIN' && (
+                                    <div>
+                                        <span class="block text-xs uppercase tracking-wider mb-1 opacity-70">Роль</span>
+                                        <span class="font-medium text-amber-600 dark:text-amber-400">Администратор системы</span>
+                                    </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-6 sm:p-10">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-6">Смена пароля</h3>
+
+                    <form id="password-form" class="max-w-md space-y-5">
+                        <div id="status-message" class="hidden rounded-xl p-4 text-sm font-medium transition-all"></div>
+
+                        <div>
+                            <label for="currentPassword" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Текущий пароль</label>
+                            <input type="password" name="currentPassword" id="currentPassword" required class="w-full border-slate-300 dark:border-slate-600 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 dark:text-white outline-none transition-all">
+                        </div>
+
+                        <div>
+                            <label for="newPassword" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Новый пароль</label>
+                            <input type="password" name="newPassword" id="newPassword" required minlength="6" class="w-full border-slate-300 dark:border-slate-600 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 dark:text-white outline-none transition-all">
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">Минимум 6 символов. Используйте цифры и буквы.</p>
+                        </div>
+
+                        <div class="pt-4">
+                            <button type="submit" id="submit-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-xl shadow-sm transition-all w-full sm:w-auto flex justify-center items-center gap-2 disabled:opacity-70">
+                                <span>Сохранить новый пароль</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        import { actions } from 'astro:actions';
+
+        const form = document.querySelector('#password-form') as HTMLFormElement;
+        const statusDiv = document.querySelector('#status-message') as HTMLDivElement;
+        const submitBtn = document.querySelector('#submit-btn') as HTMLButtonElement;
+
+        form?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            submitBtn.disabled = true;
+            submitBtn.querySelector('span')!.textContent = 'Сохранение...';
+            statusDiv.classList.add('hidden');
+            statusDiv.className = 'hidden rounded-xl p-4 text-sm font-medium mb-4';
+
+            const formData = new FormData(form);
+            const { data, error } = await actions.auth.changePassword(formData);
+
+            submitBtn.disabled = false;
+            submitBtn.querySelector('span')!.textContent = 'Сохранить новый пароль';
+
+            if (error) {
+                statusDiv.classList.remove('hidden');
+                statusDiv.classList.add('bg-red-50', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400', 'border', 'border-red-200', 'dark:border-red-800');
+                statusDiv.textContent = error.message;
+            } else {
+                statusDiv.classList.remove('hidden');
+                statusDiv.classList.add('bg-green-50', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400', 'border', 'border-green-200', 'dark:border-green-800');
+                statusDiv.textContent = data.message;
+                form.reset();
+            }
+        });
+    </script>
+</Layout>
