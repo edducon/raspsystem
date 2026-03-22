@@ -58,30 +58,20 @@ const formattedRetakes = allRetakes.map(r => ({
 }));
 ---
 
-<Layout title="Расписание ликвидации задолженностей">
-    <header class="sticky top-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div class="w-7 h-7 bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center font-bold text-base rounded-md">П</div>
-                <div class="font-semibold text-slate-900 dark:text-white text-sm">Расписание пересдач</div>
+<Layout title="Расписание пересдач — МПУ ФИТ">
+    <a slot="nav-actions" href="/login"
+        class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+        Войти
+    </a>
+
+    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="mb-7">
+                <p class="text-xs font-semibold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1.5">Факультет информационных технологий</p>
+                <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Расписание пересдач</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-500 mt-1">Московский Политехнический Университет</p>
             </div>
-            <a href="/login" class="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium transition-colors border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
-                Вход для сотрудников
-            </a>
-        </div>
-    </header>
-
-    <section class="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/60 transition-colors">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <p class="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">Факультет информационных технологий</p>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Расписание пересдач</h1>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1.5">Московский Политехнический Университет</p>
-        </div>
-    </section>
-
-    <main class="min-h-screen py-8 px-4 sm:px-6 lg:px-8 bg-slate-50/50 dark:bg-slate-950 flex flex-col transition-colors">
-        <div class="flex-grow">
             <StudentBoard client:load groups={apiGroups} retakes={formattedRetakes} today={today} />
         </div>
-    </main>
+    </div>
 </Layout>
