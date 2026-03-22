@@ -26,96 +26,92 @@ if (profileData?.departmentIds && profileData.departmentIds.length > 0) {
     const depts = await db.select({ name: departments.name })
         .from(departments)
         .where(inArray(departments.id, profileData.departmentIds));
-
     userDepartmentsNames = depts.map(d => d.name);
 }
 
 const displayName = profileData?.fullName || (profileData?.role === 'ADMIN' ? 'Главный Администратор' : 'Сотрудник');
 const initial = displayName.charAt(0).toUpperCase();
+
+let roleLabel = 'Преподаватель';
+let roleClass = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300';
+if (profileData?.role === 'ADMIN') {
+    roleLabel = 'Администратор';
+    roleClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400';
+} else if (profileData?.role === 'EMPLOYEE') {
+    roleLabel = 'Диспетчер';
+    roleClass = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400';
+}
 ---
 
-<Layout title="Профиль сотрудника">
-    <main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-        <div class="max-w-3xl mx-auto">
+<Layout title="Профиль — Пересдачи МПУ">
+    <Fragment slot="nav-actions">
+        <a href="/dashboard"
+            class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            ← Дашборд
+        </a>
+    </Fragment>
 
-            <div class="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                <div>
-                    <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Личный кабинет</h1>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Управление учетной записью и безопасностью</p>
-                </div>
-                <a href="/dashboard" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-5 rounded-xl shadow-sm transition-colors">
-                    ← На главную
-                </a>
-            </div>
+    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div class="max-w-2xl mx-auto px-4 sm:px-6 py-8">
 
-            <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
-
-                <div class="p-6 sm:p-10 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-
-                    <div class="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-4xl font-bold shadow-md shrink-0">
+            <!-- Profile card -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-5">
+                <div class="px-6 py-8 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-indigo-950/30 dark:to-slate-900 border-b border-slate-200/70 dark:border-slate-800/70 flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-500/25 shrink-0">
                         {initial}
                     </div>
-
-                    <div class="text-center sm:text-left flex-1">
-                        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-2">{displayName}</h2>
-
-                        <div class="flex flex-wrap justify-center sm:justify-start gap-2 mb-5">
-                            {userDepartmentsNames.length > 0 ? (
-                                userDepartmentsNames.map(dept => (
-                                        <span class="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-sm font-medium">
+                    <div class="text-center sm:text-left">
+                        <h1 class="text-xl font-bold text-slate-900 dark:text-white">{displayName}</h1>
+                        <div class="flex flex-wrap justify-center sm:justify-start items-center gap-2 mt-2">
+                            <span class={`px-2.5 py-0.5 rounded-md text-xs font-semibold ${roleClass}`}>{roleLabel}</span>
+                            <span class="font-mono text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                {profileData?.username}
+                            </span>
+                        </div>
+                        {userDepartmentsNames.length > 0 && (
+                            <div class="flex flex-wrap justify-center sm:justify-start gap-1.5 mt-3">
+                                {userDepartmentsNames.map(dept => (
+                                    <span class="text-xs bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/50 px-2.5 py-1 rounded-full">
                                         {dept}
                                     </span>
-                                ))
-                            ) : (
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium">
-                                    Кафедры не назначены
-                                </span>
-                            )}
-                        </div>
-
-                        <div class="flex flex-col sm:flex-row justify-center sm:justify-start gap-4 sm:gap-8 text-sm text-slate-500 dark:text-slate-400">
-                            <div>
-                                <span class="block text-xs uppercase tracking-wider mb-1 opacity-70">Логин для входа</span>
-                                <span class="font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{profileData?.username}</span>
+                                ))}
                             </div>
-                            {profileData?.role === 'ADMIN' && (
-                                    <div>
-                                        <span class="block text-xs uppercase tracking-wider mb-1 opacity-70">Роль</span>
-                                        <span class="font-medium text-amber-600 dark:text-amber-400">Администратор системы</span>
-                                    </div>
-                            )}
-                        </div>
+                        )}
                     </div>
                 </div>
 
-                <div class="p-6 sm:p-10">
-                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-6">Смена пароля</h3>
+                <!-- Change password -->
+                <div class="px-6 py-7">
+                    <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-5">Смена пароля</h2>
 
-                    <form id="password-form" class="max-w-md space-y-5">
-                        <div id="status-message" class="hidden rounded-xl p-4 text-sm font-medium transition-all"></div>
+                    <form id="password-form" class="max-w-sm space-y-4">
+                        <div id="status-message" class="hidden rounded-xl p-3.5 text-sm font-medium"></div>
 
                         <div>
                             <label for="currentPassword" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Текущий пароль</label>
-                            <input type="password" name="currentPassword" id="currentPassword" required class="w-full border-slate-300 dark:border-slate-600 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 dark:text-white outline-none transition-all">
+                            <input type="password" name="currentPassword" id="currentPassword" required
+                                class="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all" />
                         </div>
 
                         <div>
                             <label for="newPassword" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Новый пароль</label>
-                            <input type="password" name="newPassword" id="newPassword" required minlength="6" class="w-full border-slate-300 dark:border-slate-600 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 dark:bg-slate-900 dark:text-white outline-none transition-all">
-                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">Минимум 6 символов. Используйте цифры и буквы.</p>
+                            <input type="password" name="newPassword" id="newPassword" required minlength="6"
+                                class="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all" />
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">Минимум 6 символов</p>
                         </div>
 
-                        <div class="pt-4">
-                            <button type="submit" id="submit-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-xl shadow-sm transition-all w-full sm:w-auto flex justify-center items-center gap-2 disabled:opacity-70">
-                                <span>Сохранить новый пароль</span>
+                        <div class="pt-2">
+                            <button type="submit" id="submit-btn"
+                                class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 px-5 rounded-xl shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
+                                <span>Сохранить пароль</span>
                             </button>
                         </div>
                     </form>
                 </div>
-
             </div>
+
         </div>
-    </main>
+    </div>
 
     <script>
         import { actions } from 'astro:actions';
@@ -129,22 +125,19 @@ const initial = displayName.charAt(0).toUpperCase();
 
             submitBtn.disabled = true;
             submitBtn.querySelector('span')!.textContent = 'Сохранение...';
-            statusDiv.classList.add('hidden');
-            statusDiv.className = 'hidden rounded-xl p-4 text-sm font-medium mb-4';
+            statusDiv.className = 'hidden rounded-xl p-3.5 text-sm font-medium';
 
             const formData = new FormData(form);
             const { data, error } = await actions.auth.changePassword(formData);
 
             submitBtn.disabled = false;
-            submitBtn.querySelector('span')!.textContent = 'Сохранить новый пароль';
+            submitBtn.querySelector('span')!.textContent = 'Сохранить пароль';
 
             if (error) {
-                statusDiv.classList.remove('hidden');
-                statusDiv.classList.add('bg-red-50', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400', 'border', 'border-red-200', 'dark:border-red-800');
+                statusDiv.className = 'rounded-xl p-3.5 text-sm font-medium bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/60';
                 statusDiv.textContent = error.message;
             } else {
-                statusDiv.classList.remove('hidden');
-                statusDiv.classList.add('bg-green-50', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400', 'border', 'border-green-200', 'dark:border-green-800');
+                statusDiv.className = 'rounded-xl p-3.5 text-sm font-medium bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/60';
                 statusDiv.textContent = data.message;
                 form.reset();
             }

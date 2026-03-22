@@ -16,10 +16,8 @@ if (sessionUser?.role !== 'ADMIN') {
     return Astro.redirect('/dashboard');
 }
 
-// 1. Получаем все кафедры для выпадающих списков
 const allDepartments = await db.select().from(departments).orderBy(departments.name);
 
-// 2. Получаем всех преподавателей + проверяем, создан ли у них профиль
 const allTeachers = await db.select({
     uuid: teachersLocal.uuid,
     fullName: teachersLocal.fullName,
@@ -32,26 +30,32 @@ const allTeachers = await db.select({
     .orderBy(teachersLocal.fullName);
 ---
 
-<Layout title="Управление системой (Админ)">
-    <main class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-        <div class="max-w-7xl mx-auto">
+<Layout title="Администратор — Пересдачи МПУ">
+    <Fragment slot="nav-center">
+        <span class="ml-3 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-semibold rounded-md hidden sm:inline-flex">
+            Администратор
+        </span>
+    </Fragment>
 
-            <div class="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                <div>
-                    <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Панель администратора</h1>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Управление сотрудниками и справочниками кафедр</p>
-                </div>
-                <a href="/dashboard" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 px-5 rounded-xl shadow-sm transition-colors">
-                    ← На главную
-                </a>
+    <Fragment slot="nav-actions">
+        <a href="/dashboard"
+            class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            ← Дашборд
+        </a>
+    </Fragment>
+
+    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="mb-6">
+                <h1 class="text-xl font-bold text-slate-900 dark:text-white">Панель администратора</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Управление сотрудниками и справочниками кафедр</p>
             </div>
 
             <AdminManager
-                    client:load
-                    teachers={allTeachers}
-                    departments={allDepartments}
+                client:load
+                teachers={allTeachers}
+                departments={allDepartments}
             />
-
         </div>
-    </main>
+    </div>
 </Layout>

@@ -88,89 +88,102 @@ if (hasOwnSchedule) {
     } catch (e) {}
 }
 
-let roleBadge = 'ПРЕПОДАВАТЕЛЬ';
-let roleClass = 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300';
+let roleBadge = 'Преподаватель';
+let roleColorClass = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300';
 
 if (isAdmin) {
-    roleBadge = 'АДМИН';
-    roleClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400';
+    roleBadge = 'Администратор';
+    roleColorClass = 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400';
 } else if (isEmployee) {
-    roleBadge = 'СОТРУДНИК КАФЕДРЫ (ДИСПЕТЧЕР)';
-    roleClass = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400';
+    roleBadge = 'Диспетчер';
+    roleColorClass = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400';
 }
 ---
 
-<Layout title="Рабочий стол">
-    <!-- Sticky header -->
-    <div class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center gap-4">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-8 h-8 bg-slate-900 dark:bg-indigo-600 text-white flex items-center justify-center font-bold text-sm rounded-lg shrink-0">П</div>
-                <div class="min-w-0">
-                    <div class="text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {dbUser?.username}
-                        {teacherFullName && <span class="font-normal text-slate-400 dark:text-slate-500 ml-1.5">— {teacherFullName}</span>}
-                    </div>
-                    <span class={`inline-block px-2 py-0.5 rounded text-xs font-bold ${roleClass}`}>{roleBadge}</span>
-                </div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-                {isAdmin && (
-                    <a href="/admin" class="text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/50 border border-indigo-100 dark:border-indigo-800/50 py-2 px-3 rounded-xl shadow-sm transition-colors">
-                        Админка
-                    </a>
-                )}
-                <a href="/profile" class="text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2 px-3 rounded-xl shadow-sm transition-colors">
-                    Профиль
-                </a>
-                <button id="logout-btn" class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2 px-3 rounded-xl shadow-sm transition-colors">
-                    Выйти
-                </button>
-            </div>
+<Layout title="Рабочий стол — Пересдачи МПУ">
+
+    <!-- Центральная часть navbar: имя пользователя + роль -->
+    <Fragment slot="nav-center">
+        <div class="flex items-center gap-2 ml-3 min-w-0">
+            <span class="text-sm font-medium text-slate-700 dark:text-slate-300 truncate hidden sm:block">
+                {teacherFullName || dbUser?.username}
+            </span>
+            <span class={`hidden sm:inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ${roleColorClass}`}>
+                {roleBadge}
+            </span>
         </div>
-    </div>
+    </Fragment>
 
-    <main class="min-h-screen pt-6 pb-12 px-4 sm:px-6 lg:px-8 flex flex-col">
-        <div class="max-w-7xl mx-auto w-full flex-grow">
+    <!-- Правая часть navbar: кнопки действий -->
+    <Fragment slot="nav-actions">
+        {isAdmin && (
+            <a href="/admin"
+                class="text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 px-3 py-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors">
+                Админка
+            </a>
+        )}
+        <a href="/profile"
+            class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+            Профиль
+        </a>
+        <button id="logout-btn"
+            class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-900/50">
+            Выйти
+        </button>
+    </Fragment>
 
+    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+            <!-- Tabs (если есть расписание И права назначать) -->
             {(hasOwnSchedule && canSchedule) && (
-                    <div class="mb-6 overflow-x-auto hide-scrollbar">
-                        <div class="flex p-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-max min-w-full sm:min-w-0 border border-slate-200 dark:border-slate-700/50">
-                            <a href="?tab=schedule" class={`px-5 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'schedule' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
-                                Моё расписание
-                            </a>
-                            <a href="?tab=retakes" class={`px-5 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'retakes' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
-                                Назначение пересдач
-                            </a>
-                        </div>
+                <div class="mb-6 overflow-x-auto hide-scrollbar">
+                    <div class="flex p-1 bg-white dark:bg-slate-900 rounded-xl w-max border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <a href="?tab=schedule"
+                            class={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                                activeTab === 'schedule'
+                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}>
+                            Моё расписание
+                        </a>
+                        <a href="?tab=retakes"
+                            class={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                                activeTab === 'retakes'
+                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}>
+                            Назначение пересдач
+                        </a>
                     </div>
+                </div>
             )}
 
             {(activeTab === 'retakes' && canSchedule) && (
-                    <RetakeScheduler
-                            client:load
-                            groups={apiGroups}
-                            subjects={apiSubjects}
-                            teachers={localTeachers}
-                            currentUser={{
-                                id: dbUser.id,
-                                role: dbUser.role,
-                                departmentIds: dbUser.departmentIds
-                            }}
-                    />
+                <RetakeScheduler
+                    client:load
+                    groups={apiGroups}
+                    subjects={apiSubjects}
+                    teachers={localTeachers}
+                    currentUser={{
+                        id: dbUser.id,
+                        role: dbUser.role,
+                        departmentIds: dbUser.departmentIds
+                    }}
+                />
             )}
 
             {(activeTab === 'schedule' && hasOwnSchedule) && (
-                    <TeacherBoard
-                            client:load
-                            teacherFullName={teacherFullName}
-                            retakes={teacherRetakesFormatted}
-                            baseSchedule={teacherBaseSchedule}
-                    />
+                <TeacherBoard
+                    client:load
+                    teacherFullName={teacherFullName}
+                    retakes={teacherRetakesFormatted}
+                    baseSchedule={teacherBaseSchedule}
+                />
             )}
 
         </div>
-    </main>
+    </div>
 
     <script>
         import { actions } from 'astro:actions';
