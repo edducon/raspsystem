@@ -26,6 +26,24 @@ const AUTH_URL = "https://zefixed.ru/auth/api/v1/login";
 // Переменная для хранения токена в памяти сервера Astro
 let cachedAccessToken: string | null = null;
 
+// In-memory кэш API-ответов с TTL 30 минут
+interface CacheEntry<T> {
+    data: T;
+    expiresAt: number;
+}
+const apiCache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function cachedApiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const cached = apiCache.get(endpoint);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.data as T;
+    }
+    const data = await apiFetch<T>(endpoint, options);
+    apiCache.set(endpoint, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    return data;
+}
+
 /**
  * Функция получения JWT токена
  */
@@ -94,22 +112,22 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retryCou
 // --- МЕТОДЫ ДЛЯ РАБОТЫ С API ---
 export const RaspyxAPI = {
     getGroups: async () => {
-        return apiFetch<any>("/groups");
+        return cachedApiFetch<any>("/groups");
     },
 
     getGroupSchedule: async (groupNumber: string, isSession: boolean = false): Promise<ScheduleApiResponse> => {
-        return apiFetch<ScheduleApiResponse>(`/schedule/group_number/${encodeURIComponent(groupNumber)}?is_session=${isSession}`);
+        return cachedApiFetch<ScheduleApiResponse>(`/schedule/group_number/${encodeURIComponent(groupNumber)}?is_session=${isSession}`);
     },
 
     getTeacherSchedule: async (teacherFio: string, isSession: boolean = false): Promise<ScheduleApiResponse> => {
-        return apiFetch<ScheduleApiResponse>(`/schedule/teacher_fio/${encodeURIComponent(teacherFio)}?is_session=${isSession}`);
+        return cachedApiFetch<ScheduleApiResponse>(`/schedule/teacher_fio/${encodeURIComponent(teacherFio)}?is_session=${isSession}`);
     },
 
     getTeachers: async () => {
-        return apiFetch<any>("/teachers");
+        return cachedApiFetch<any>("/teachers");
     },
 
     getSubjects: async () => {
-        return apiFetch<any>("/subjects");
+        return cachedApiFetch<any>("/subjects");
     },
 };

@@ -37,26 +37,28 @@ export async function getAvailableTimeSlots(
     }
 
     // 3. Проверяем нашу локальную БД на наличие других пересдач в этот день
-    // Ищем все пересдачи на эту дату для этой группы ИЛИ этих преподавателей
     const teacherUuids = teacherList.map(t => t.uuid);
-
-    const existingRetakes = await db.select({
-        timeSlots: retakes.timeSlots
-    })
-        .from(retakes)
-        .leftJoin(retakeTeachers, eq(retakes.id, retakeTeachers.retakeId))
-        .where(
-            and(
-                eq(retakes.date, dateStr),
-            )
-        );
-
-    // Собираем все занятые слоты из локальной БД (для текущей группы и преподов)
     const busySlotsDb = new Set<number>();
-    for (const row of existingRetakes) {
-        // Здесь нужна проверка, относится ли row к нашей группе или преподам
-        // (Упрощенно: считаем, что мы уже отфильтровали нужные записи)
+
+    // 3a. Слоты, занятые пересдачами этой группы
+    const groupRetakes = await db.select({ timeSlots: retakes.timeSlots })
+        .from(retakes)
+        .where(and(eq(retakes.date, dateStr), eq(retakes.groupUuid, groupUuid)));
+
+    for (const row of groupRetakes) {
         row.timeSlots.forEach(slot => busySlotsDb.add(slot));
+    }
+
+    // 3b. Слоты, занятые пересдачами выбранных преподавателей
+    if (teacherUuids.length > 0) {
+        const teacherRetakes = await db.select({ timeSlots: retakes.timeSlots })
+            .from(retakes)
+            .innerJoin(retakeTeachers, eq(retakes.id, retakeTeachers.retakeId))
+            .where(and(eq(retakes.date, dateStr), inArray(retakeTeachers.teacherUuid, teacherUuids)));
+
+        for (const row of teacherRetakes) {
+            row.timeSlots.forEach(slot => busySlotsDb.add(slot));
+        }
     }
 
     // Исключаем слоты, занятые пересдачами
