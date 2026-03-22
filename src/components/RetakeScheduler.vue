@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue';
 import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
 import { actions } from 'astro:actions';
 import { addToast } from '../composables/useToast';
+import { cleanSubjectName, normalizeForCompare, fuzzyMatch } from '../lib/subjectNorm';
 
 const props = defineProps<{
   groups: { uuid: string; number: string }[];
@@ -43,9 +44,8 @@ const selectGroup = (group: { uuid: string; number: string }) => {
 const groupHistory = ref<{ subjectName: string; teacherNames: string[] }[]>([]);
 const existingGroupRetakes = ref<{id: number, subjectUuid: string, attemptNumber: number, date: string, createdBy: string}[]>([]);
 
-const cleanSubjectName = (name: string) => {
-  return name.replace(/(?:\s+[-/]?\s*|\s*\()(?:п\/?г|гр\.?|подгруппа)\s*\d+(\)|\])?.*$/i, '').replace(/[,.\s]+$/, '').trim();
-};
+// Collapse state for form sections (2–4) on mobile
+const sectionsCollapsed = ref({ slots: false, format: false, commission: false });
 
 const formatShortName = (fullName?: string) => {
   if (!fullName) return '';
@@ -58,12 +58,22 @@ const formatShortName = (fullName?: string) => {
 const availableSubjects = computed(() => {
   if (groupHistory.value.length === 0) return [];
   const historyNames = groupHistory.value.map(h => h.subjectName);
-  const cleanedHistoryNames = historyNames.map(cleanSubjectName);
+  const cleanedHistoryNames = historyNames.map(n => normalizeForCompare(n));
 
-  const matched = props.subjects.filter(s => cleanedHistoryNames.includes(cleanSubjectName(s.name)));
+  // Strict match first
+  let matched = props.subjects.filter(s =>
+    cleanedHistoryNames.some(h => h === normalizeForCompare(s.name))
+  );
 
-  const uniqueSubjects = [];
-  const seenNames = new Set();
+  // Fuzzy fallback if strict yields nothing
+  if (matched.length === 0) {
+    matched = props.subjects.filter(s =>
+      historyNames.some(h => fuzzyMatch(h, s.name))
+    );
+  }
+
+  const uniqueSubjects: { uuid: string; name: string }[] = [];
+  const seenNames = new Set<string>();
   for (const subject of matched) {
     const cleaned = cleanSubjectName(subject.name);
     if (!seenNames.has(cleaned)) {
@@ -71,7 +81,7 @@ const availableSubjects = computed(() => {
       uniqueSubjects.push({ uuid: subject.uuid, name: cleaned });
     }
   }
-  return uniqueSubjects.sort((a, b) => a.name.localeCompare(b.name));
+  return uniqueSubjects.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 });
 
 watch(selectedGroupUuid, async (newUuid) => {
@@ -300,11 +310,19 @@ const deleteRetake = async (id: number) => {
 </script>
 
 <template>
-  <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 md:p-8 relative z-10 transition-colors">
-    <h2 class="text-xl md:text-2xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-      <Calendar class="text-indigo-600 dark:text-indigo-400" />
-      Назначение пересдачи
-    </h2>
+  <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 md:p-8 relative z-10 transition-colors">
+    <div class="bg-indigo-50/60 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 rounded-xl px-5 py-4 mb-7">
+      <h2 class="text-lg md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+        <Calendar class="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+        Назначение пересдачи
+      </h2>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0">1</div>
+      <h3 class="text-base font-bold text-slate-800 dark:text-white">Группа, дисциплина и дата</h3>
+    </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="relative">
@@ -357,7 +375,18 @@ const deleteRetake = async (id: number) => {
     </div>
 
     <div v-if="selectedDate && selectedGroupUuid" class="mb-8">
-      <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2"><Clock class="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Расписание группы на выбранный день</h3>
+      <hr class="border-slate-100 dark:border-slate-700/50 mb-6" />
+      <!-- Step 2 header with mobile collapse -->
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0">2</div>
+          <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2"><Clock class="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Расписание на выбранный день</h3>
+        </div>
+        <button @click="sectionsCollapsed.slots = !sectionsCollapsed.slots" class="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <ChevronDown class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="sectionsCollapsed.slots ? '-rotate-90' : ''" />
+        </button>
+      </div>
+      <div :class="{ 'hidden md:block': sectionsCollapsed.slots }">
       <div v-if="isLoadingSlots" class="text-slate-500 dark:text-slate-400 flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700">
         <div class="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin mr-3"></div> Синхронизация с базой...
       </div>
@@ -374,8 +403,21 @@ const deleteRetake = async (id: number) => {
           <div v-if="daySchedule[slot.toString()] && daySchedule[slot.toString()].details" class="text-left md:text-right text-sm"><div class="text-slate-500 dark:text-slate-400 font-medium">{{ daySchedule[slot.toString()].details.type }}</div><div class="font-medium text-slate-800 dark:text-slate-200 mt-0.5 max-w-[200px] truncate">{{ daySchedule[slot.toString()].details.location }}</div></div>
         </div>
       </div>
+      </div> <!-- end collapsible slots wrapper -->
     </div>
 
+    <hr class="border-slate-100 dark:border-slate-700/50 mb-6" />
+    <!-- Step 3 header with mobile collapse -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0">3</div>
+        <h3 class="text-base font-bold text-slate-800 dark:text-white">Формат и номер попытки</h3>
+      </div>
+      <button @click="sectionsCollapsed.format = !sectionsCollapsed.format" class="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+        <ChevronDown class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="sectionsCollapsed.format ? '-rotate-90' : ''" />
+      </button>
+    </div>
+    <div :class="{ 'hidden md:block': sectionsCollapsed.format }">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-5 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-slate-200 dark:border-slate-700/50">
       <div>
         <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4 uppercase tracking-wider">Формат</h3>
@@ -419,12 +461,23 @@ const deleteRetake = async (id: number) => {
         </div>
       </div>
     </div>
+    </div> <!-- end collapsible format wrapper -->
 
+    <hr class="border-slate-100 dark:border-slate-700/50 my-6" />
+    <!-- Step 4 header with mobile collapse -->
+    <div class="flex items-center justify-between mb-4" :class="{'opacity-50 pointer-events-none': subjectBelongsToAnotherDept}">
+      <div class="flex items-center gap-3">
+        <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold shrink-0">4</div>
+        <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+          <Users class="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Состав комиссии
+        </h3>
+      </div>
+      <button @click="sectionsCollapsed.commission = !sectionsCollapsed.commission" class="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+        <ChevronDown class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="sectionsCollapsed.commission ? '-rotate-90' : ''" />
+      </button>
+    </div>
+    <div :class="{ 'hidden md:block': sectionsCollapsed.commission }">
     <div class="mb-8" :class="{'opacity-50 pointer-events-none': subjectBelongsToAnotherDept}">
-      <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-        <Users class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-        Состав комиссии
-      </h3>
 
       <div v-if="mainTeacherLacksDept" class="mb-5 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 flex items-start gap-3 transition-colors">
         <AlertTriangle class="w-5 h-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
@@ -521,6 +574,8 @@ const deleteRetake = async (id: number) => {
 
       </div>
     </div>
+
+    </div> <!-- end collapsible commission wrapper -->
 
     <div class="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
       <button @click="submitRetake" :disabled="isSubmitting || subjectBelongsToAnotherDept" class="bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-medium py-3 px-8 rounded-xl shadow-sm flex items-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
