@@ -7,6 +7,7 @@ import { db } from '../db';
 import { retakes, retakeTeachers, teachersLocal } from '../db/schema';
 import { RaspyxAPI } from '../lib/api-client';
 import { eq, inArray } from 'drizzle-orm';
+import { cleanSubjectName } from '../lib/subjectNorm';
 
 let apiGroups = [];
 let apiSubjects = [];
@@ -48,7 +49,7 @@ const formattedRetakes = allRetakes.map(r => ({
     id: r.id,
     groupUuid: r.groupUuid,
     groupName: apiGroups.find((g: any) => g.uuid === r.groupUuid)?.number || 'Неизвестная группа',
-    subjectName: apiSubjects.find((s: any) => s.uuid === r.subjectUuid)?.name || 'Неизвестный предмет',
+    subjectName: cleanSubjectName(apiSubjects.find((s: any) => s.uuid === r.subjectUuid)?.name || 'Неизвестный предмет'),
     date: r.date,
     timeSlots: r.timeSlots,
     room: r.roomUuid,
@@ -60,17 +61,26 @@ const formattedRetakes = allRetakes.map(r => ({
 
 <Layout title="Расписание пересдач — МПУ ФИТ">
     <a slot="nav-actions" href="/login"
-        class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+        class="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-all">
         Войти
     </a>
 
-    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
-        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="mb-7">
-                <p class="text-xs font-semibold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1.5">Факультет информационных технологий</p>
-                <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Расписание пересдач</h1>
-                <p class="text-sm text-slate-500 dark:text-slate-500 mt-1">Московский Политехнический Университет</p>
+    <div class="min-h-[calc(100vh-4rem)]">
+        <!-- Decorative gradient top -->
+        <div class="relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-b from-blue-50/80 via-violet-50/30 to-transparent dark:from-blue-950/30 dark:via-violet-950/10 dark:to-transparent pointer-events-none"></div>
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-br from-blue-400/8 to-violet-400/8 dark:from-blue-600/5 dark:to-violet-600/5 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-4">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400 mb-2.5">Факультет информационных технологий</p>
+                <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                    Расписание пересдач
+                </h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Московский Политехнический Университет</p>
             </div>
+        </div>
+
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <StudentBoard client:load groups={apiGroups} retakes={formattedRetakes} today={today} />
         </div>
     </div>

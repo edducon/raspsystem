@@ -32,23 +32,23 @@ const allTeachers = await db.select({
 
 <Layout title="Администратор — Пересдачи МПУ">
     <Fragment slot="nav-center">
-        <span class="ml-3 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-semibold rounded-md hidden sm:inline-flex">
+        <span class="ml-3 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-lg uppercase tracking-wider hidden sm:inline-flex">
             Администратор
         </span>
     </Fragment>
 
     <Fragment slot="nav-actions">
         <a href="/dashboard"
-            class="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            ← Дашборд
+            class="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+            &larr; Дашборд
         </a>
     </Fragment>
 
-    <div class="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div class="min-h-[calc(100vh-4rem)]">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div class="mb-6">
                 <h1 class="text-xl font-bold text-slate-900 dark:text-white">Панель администратора</h1>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Управление сотрудниками и справочниками кафедр</p>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Управление сотрудниками и кафедрами</p>
             </div>
 
             <AdminManager
