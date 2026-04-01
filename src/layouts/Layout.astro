@@ -25,6 +25,7 @@ const currentYear = new Date().getFullYear();
             }
             return 'light';
         })();
+
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
         } else {
@@ -32,55 +33,88 @@ const currentYear = new Date().getFullYear();
         }
     </script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased min-h-screen flex flex-col">
 
-<header class="sticky top-0 z-50 h-16 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl transition-colors">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center">
-        <a href="/" class="flex items-center gap-2.5 shrink-0 group">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg shadow-blue-600/20 group-hover:shadow-blue-600/40 group-hover:scale-105 transition-all select-none">П</div>
-            <div class="hidden sm:block">
-                <div class="font-bold text-slate-900 dark:text-white text-[15px] leading-tight tracking-tight">Пересдачи</div>
-                <div class="text-[10px] text-slate-400 dark:text-slate-500 font-semibold tracking-wider uppercase">МПУ · ФИТ</div>
+<body class="font-sans antialiased min-h-screen flex flex-col text-slate-900 dark:text-slate-100">
+<div class="page-bg"></div>
+<div class="page-noise"></div>
+
+<header class="sticky top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
+    <div class="mx-auto max-w-7xl">
+        <div class="nav-shell h-16 px-4 sm:px-5 lg:px-6 flex items-center gap-4">
+            <a href="/" class="flex items-center gap-3 shrink-0 group">
+                <div class="brand-mark flex items-center justify-center overflow-hidden" style="background: white; background-image: none; box-shadow: 0 12px 30px rgba(0,0,0,0.1);">
+                    <img
+                            src="/image/logo.png"
+                            alt="Логотип университета"
+                            class="w-8 h-8 object-contain"
+                    />
+                </div>
+
+                <div class="hidden sm:block">
+                    <div class="font-extrabold text-[15px] leading-tight tracking-tight text-slate-800 dark:text-white">
+                        Пересдачи
+                    </div>
+                    <div class="text-[10px] text-slate-600 dark:text-white/55 font-semibold tracking-[0.22em] uppercase">
+                        Московского политехнического университета
+                    </div>
+                </div>
+            </a>
+
+            <div class="flex-1 flex items-center justify-center overflow-hidden min-w-0">
+                <slot name="nav-center" />
             </div>
-        </a>
 
-        <div class="flex-1 flex items-center justify-center overflow-hidden mx-4">
-            <slot name="nav-center" />
-        </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <slot name="nav-actions" />
 
-        <div class="flex items-center gap-1.5 shrink-0">
-            <slot name="nav-actions" />
-            <div class="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1.5 hidden sm:block"></div>
-            <button id="theme-toggle"
-                class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all"
-                title="Переключить тему">
-                <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
-                <svg id="theme-toggle-light-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
-            </button>
+                <div class="hidden sm:block w-px h-6 bg-white/10 dark:bg-white/10 mx-1"></div>
+
+                <button
+                        id="theme-toggle"
+                        class="theme-button"
+                        title="Переключить тему"
+                        aria-label="Переключить тему"
+                >
+                    <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                    </svg>
+
+                    <svg id="theme-toggle-light-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 </header>
 
-<main class="flex-grow transition-colors duration-300">
+<main class="flex-grow relative z-10 transition-colors duration-300">
     <slot />
 </main>
 
 <ToastProvider client:load />
 
-<footer class="border-t border-slate-200/60 dark:border-slate-800/60 mt-auto">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-        <div class="flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-slate-400 dark:text-slate-600">
-            <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
-                <span>&copy; {currentYear} Факультет информационных технологий МПУ</span>
-                <span class="hidden sm:inline opacity-40">&middot;</span>
-                <a href="tel:+74952230523" class="hover:text-slate-600 dark:hover:text-slate-400 transition-colors">+7 495 223-05-23, доб. 1709</a>
-                <a href="mailto:fit@mospolytech.ru" class="hover:text-slate-600 dark:hover:text-slate-400 transition-colors">fit@mospolytech.ru</a>
-            </div>
-            <span class="flex items-center gap-1.5">
+<footer class="relative z-10 mt-auto px-3 pb-3 sm:px-4 sm:pb-4">
+    <div class="mx-auto max-w-7xl">
+        <div class="footer-shell px-4 py-5 sm:px-6">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-[11px]">
+                <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-slate-600 dark:text-white/45">
+                    <span>&copy; {currentYear} Факультет информационных технологий МПУ</span>
+                    <span class="hidden sm:inline opacity-30 text-slate-400 dark:text-white/30">&middot;</span>
+                    <a href="tel:+74952230523" class="footer-link text-slate-600 dark:text-white/45 hover:text-slate-900 dark:hover:text-white transition-colors">+7 495 223-05-23, доб. 1709</a>
+                    <a href="mailto:fit@mospolytech.ru" class="footer-link text-slate-600 dark:text-white/45 hover:text-slate-900 dark:hover:text-white transition-colors">fit@mospolytech.ru</a>
+                </div>
+
+                <span class="flex items-center gap-1.5 text-slate-600 dark:text-white/50">
                 Разработано
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" class="text-rose-500"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-                <a href="https://t.me/edducon" target="_blank" class="font-semibold text-blue-600 dark:text-blue-400 hover:underline">@edducon</a>
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" class="text-rose-500">
+                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                </svg>
+                <a href="https://t.me/edducon" target="_blank" class="font-semibold text-slate-700 dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                    @edducon
+                </a>
             </span>
+            </div>
         </div>
     </div>
 </footer>
@@ -91,16 +125,18 @@ const currentYear = new Date().getFullYear();
     const themeToggleBtn = document.getElementById('theme-toggle');
 
     if (document.documentElement.classList.contains('dark')) {
-        themeToggleLightIcon.classList.remove('hidden');
+        themeToggleLightIcon?.classList.remove('hidden');
     } else {
-        themeToggleDarkIcon.classList.remove('hidden');
+        themeToggleDarkIcon?.classList.remove('hidden');
     }
 
-    themeToggleBtn.addEventListener('click', function() {
+    themeToggleBtn?.addEventListener('click', function () {
         const isDark = document.documentElement.classList.contains('dark');
+
         const toggleTheme = () => {
-            themeToggleDarkIcon.classList.toggle('hidden');
-            themeToggleLightIcon.classList.toggle('hidden');
+            themeToggleDarkIcon?.classList.toggle('hidden');
+            themeToggleLightIcon?.classList.toggle('hidden');
+
             if (isDark) {
                 document.documentElement.classList.remove('dark');
                 localStorage.setItem('theme', 'light');
@@ -118,23 +154,241 @@ const currentYear = new Date().getFullYear();
         const x = isDark ? innerWidth : 0;
         const y = isDark ? innerHeight : 0;
         const endRadius = Math.hypot(innerWidth, innerHeight);
+
         const transition = document.startViewTransition(toggleTheme);
+
         transition.ready.then(() => {
             document.documentElement.animate(
-                { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`] },
-                { duration: 500, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' }
+                {
+                    clipPath: [
+                        `circle(0px at ${x}px ${y}px)`,
+                        `circle(${endRadius}px at ${x}px ${y}px)`
+                    ]
+                },
+                {
+                    duration: 500,
+                    easing: 'ease-in-out',
+                    pseudoElement: '::view-transition-new(root)'
+                }
             );
         });
     });
 </script>
 
 <style is:global>
-    html.dark { color-scheme: dark; }
-    ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-    ::view-transition-old(root) { z-index: 1; }
-    ::view-transition-new(root) { z-index: 2; }
-    .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    :root {
+        color-scheme: light;
+        --page-bg:
+                radial-gradient(circle at 15% 18%, rgba(239, 68, 68, 0.12), transparent 24%),
+                radial-gradient(circle at 82% 12%, rgba(59, 130, 246, 0.12), transparent 22%),
+                radial-gradient(circle at 50% 100%, rgba(15, 23, 42, 0.06), transparent 28%),
+                linear-gradient(180deg, #f4f4f5 0%, #eceef3 42%, #e8ebf2 100%);
+        --shell-bg: rgba(255, 255, 255, 0.58);
+        --shell-border: rgba(255, 255, 255, 0.45);
+        --shell-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+        --footer-bg: rgba(255, 255, 255, 0.42);
+        --text-main: #0f172a;
+        --text-soft: rgba(15, 23, 42, 0.62);
+    }
+
+    html.dark {
+        color-scheme: dark;
+        --page-bg:
+                radial-gradient(circle at 15% 18%, rgba(239, 68, 68, 0.18), transparent 24%),
+                radial-gradient(circle at 82% 12%, rgba(59, 130, 246, 0.14), transparent 22%),
+                radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.04), transparent 28%),
+                linear-gradient(180deg, #0a0a0c 0%, #111216 45%, #151821 100%);
+        --shell-bg: rgba(14, 16, 22, 0.64);
+        --shell-border: rgba(255, 255, 255, 0.08);
+        --shell-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+        --footer-bg: rgba(14, 16, 22, 0.56);
+        --text-main: #ffffff;
+        --text-soft: rgba(255, 255, 255, 0.62);
+    }
+
+    html,
+    body {
+        min-height: 100%;
+    }
+
+    body {
+        background: var(--page-bg);
+        color: var(--text-main);
+        transition:
+                background-color 0.35s ease,
+                color 0.35s ease;
+        overflow-x: clip;
+    }
+
+    .page-bg {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.22), transparent 22%),
+                linear-gradient(to top, rgba(0, 0, 0, 0.1), transparent 28%);
+    }
+
+    html:not(.dark) .page-bg {
+        background:
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.18), transparent 18%),
+                linear-gradient(to top, rgba(15, 23, 42, 0.04), transparent 22%);
+    }
+
+    .page-noise {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.045;
+        mix-blend-mode: soft-light;
+        background-image:
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+    }
+
+    .nav-shell {
+        border: 1px solid var(--shell-border);
+        background: var(--shell-bg);
+        box-shadow: var(--shell-shadow);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        border-radius: 22px;
+        transition:
+                background-color 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease,
+                transform 0.25s ease;
+    }
+
+    .nav-shell:hover {
+        transform: translateY(-1px);
+    }
+
+    .brand-mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.95rem;
+        font-weight: 900;
+        color: white;
+        background:
+                linear-gradient(135deg, #ef4444 0%, #dc2626 42%, #2563eb 100%);
+        box-shadow:
+                0 12px 30px rgba(239, 68, 68, 0.26),
+                inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        transition:
+                transform 0.25s ease,
+                box-shadow 0.25s ease;
+        user-select: none;
+    }
+
+    .group:hover .brand-mark {
+        transform: translateY(-1px) scale(1.03);
+        box-shadow:
+                0 16px 34px rgba(239, 68, 68, 0.32),
+                inset 0 1px 0 rgba(255, 255, 255, 0.26);
+    }
+
+    .theme-button {
+        width: 40px;
+        height: 40px;
+        border-radius: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        transition:
+                transform 0.22s ease,
+                background-color 0.22s ease,
+                color 0.22s ease,
+                border-color 0.22s ease,
+                box-shadow 0.22s ease;
+    }
+
+    .theme-button:hover {
+        transform: translateY(-1px);
+        color: white;
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.14);
+        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
+    }
+
+    html:not(.dark) .theme-button {
+        color: rgba(15, 23, 42, 0.68);
+        background: rgba(255, 255, 255, 0.62);
+        border-color: rgba(15, 23, 42, 0.08);
+    }
+
+    html:not(.dark) .theme-button:hover {
+        color: rgba(15, 23, 42, 0.95);
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(15, 23, 42, 0.1);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.1);
+    }
+
+    .footer-shell {
+        border: 1px solid var(--shell-border);
+        background: var(--footer-bg);
+        box-shadow: var(--shell-shadow);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 22px;
+        transition:
+                background-color 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease;
+    }
+
+    .footer-link {
+        transition: color 0.2s ease;
+    }
+
+    .footer-link:hover {
+        color: white;
+    }
+
+    html:not(.dark) .footer-link:hover {
+        color: #0f172a;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+    }
+
+    ::view-transition-old(root) {
+        z-index: 1;
+    }
+
+    ::view-transition-new(root) {
+        z-index: 2;
+    }
+
+    .hide-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    * {
+        transition:
+                background-color 0.25s ease,
+                border-color 0.25s ease,
+                color 0.25s ease,
+                box-shadow 0.25s ease;
+    }
 </style>
 </body>
 </html>
