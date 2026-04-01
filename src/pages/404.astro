@@ -9,13 +9,23 @@ export const prerender = false;
 
         <div class="relative z-10 max-w-2xl mx-auto flex flex-col items-center">
 
-            <h1 class="text-6xl md:text-8xl font-black text-slate-900 dark:text-white mb-6 tracking-tighter drop-shadow-sm">
-                Аудитория <span class="text-indigo-600 dark:text-indigo-500">404</span>
-            </h1>
+            <!-- 4(логотип в белом круге)4 вместо 404 -->
+            <div class="flex items-center justify-center gap-2 mb-6">
+                <span class="text-6xl md:text-8xl font-black text-slate-900 dark:text-white tracking-tighter drop-shadow-sm">4</span>
+                <div class="w-20 h-20 md:w-28 md:h-28 rounded-full bg-white dark:bg-white flex items-center justify-center overflow-hidden shadow-xl">
+                    <img
+                            src="/image/logo.png"
+                            alt="Логотип университета"
+                            class="w-12 h-12 md:w-16 md:h-16 object-contain brightness-100 contrast-100 saturate-100"
+                            style="filter: none; mix-blend-mode: normal;"
+                    />
+                </div>
+                <span class="text-6xl md:text-8xl font-black text-slate-900 dark:text-white tracking-tighter drop-shadow-sm">4</span>
+            </div>
 
-            <p class="text-xl md:text-2xl text-slate-800 dark:text-slate-200 mb-3 font-semibold">
-                Кажется, её нет на схеме корпуса.
-            </p>
+            <h1 class="text-xl md:text-2xl text-slate-800 dark:text-slate-200 mb-3 font-semibold">
+                Кажется, этой аудитории нет на схеме корпуса.
+            </h1>
 
             <p class="text-base text-slate-500 dark:text-slate-400 mb-10 max-w-lg mx-auto leading-relaxed">
                 Возможно, пара была перенесена, преподаватель ушел пить кофе, или вы просто опечатались в ссылке. В любом случае, здесь никого нет.
