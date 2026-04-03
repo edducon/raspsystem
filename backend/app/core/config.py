@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     debug: bool = True
 
+    database_url: str | None = Field(default=None, alias="DATABASE_URL")
     postgres_server: str = Field(default="postgres", alias="POSTGRES_SERVER")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_user: str = Field(default="rasp_user", alias="POSTGRES_USER")
@@ -28,6 +29,8 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_database_uri(self) -> str:
+        if self.database_url:
+            return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_server}:{self.postgres_port}/{self.postgres_db}"
