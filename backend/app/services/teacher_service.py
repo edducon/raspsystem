@@ -35,17 +35,8 @@ class TeacherService:
                 detail="Position not found",
             )
 
-        if data.email is not None:
-            existing = self.db.scalar(select(Teacher).where(Teacher.email == str(data.email)))
-            if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Teacher with this email already exists",
-                )
-
         teacher = Teacher(
             full_name=data.full_name,
-            email=str(data.email) if data.email is not None else None,
             department_id=data.department_id,
             position_id=data.position_id,
         )
@@ -69,16 +60,7 @@ class TeacherService:
                 detail="Position not found",
             )
 
-        if data.email is not None:
-            existing = self.db.scalar(select(Teacher).where(Teacher.email == str(data.email)))
-            if existing and existing.id != teacher_id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Teacher with this email already exists",
-                )
-
         teacher.full_name = data.full_name
-        teacher.email = str(data.email) if data.email is not None else None
         teacher.department_id = data.department_id
         teacher.position_id = data.position_id
         self.db.commit()
