@@ -44,18 +44,25 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
+        sa.Column("username", sa.String(length=100), nullable=False),
         sa.Column("full_name", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("role", sa.String(length=50), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("department_id", sa.Integer(), nullable=True),
+        sa.Column("department_ids", sa.ARRAY(sa.Integer()), nullable=False, server_default="{}"),
+        sa.Column("teacher_uuid", sa.String(length=36), nullable=True),
         sa.ForeignKeyConstraint(["department_id"], ["departments.id"]),
     )
+    op.create_index("ix_users_username", "users", ["username"], unique=True)
     op.create_index("ix_users_role", "users", ["role"], unique=False)
+    op.create_index("ix_users_teacher_uuid", "users", ["teacher_uuid"], unique=False)
 
 
 def downgrade() -> None:
+    op.drop_index("ix_users_teacher_uuid", table_name="users")
     op.drop_index("ix_users_role", table_name="users")
+    op.drop_index("ix_users_username", table_name="users")
     op.drop_table("users")
 
     op.drop_index("ix_teachers_position_id", table_name="teachers")

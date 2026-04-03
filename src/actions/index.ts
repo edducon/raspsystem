@@ -1,159 +1,10 @@
 import { defineAction } from 'astro:actions';
 import { z } from 'astro:schema';
 import { db } from '../db';
-import { retakes, retakeTeachers, users, teachersLocal, pastSemester, departments } from '../db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
-import { Argon2id } from 'oslo/password';
-import { lucia } from '../lib/auth';
+import { pastSemester, retakes, retakeTeachers, teachersLocal } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 
 export const server = {
-    auth: {
-        login: defineAction({
-            accept: 'form',
-            input: z.object({
-                username: z.string(),
-                password: z.string(),
-            }),
-            handler: async ({ username, password }, context) => {
-                const [user] = await db.select().from(users).where(eq(users.username, username));
-                if (!user) throw new Error("Неверный логин или пароль");
-
-                const validPassword = await new Argon2id().verify(user.passwordHash, password);
-                if (!validPassword) throw new Error("Неверный логин или пароль");
-
-                const session = await lucia.createSession(user.id, {});
-                const sessionCookie = lucia.createSessionCookie(session.id);
-                context.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-
-                return { success: true };
-            }
-        }),
-
-        logout: defineAction({
-            handler: async (_, context) => {
-                if (!context.locals.session) return { success: false };
-                await lucia.invalidateSession(context.locals.session.id);
-                const sessionCookie = lucia.createBlankSessionCookie();
-                context.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-                return { success: true };
-            }
-        }),
-
-        changePassword: defineAction({
-            accept: 'form',
-            input: z.object({
-                currentPassword: z.string(),
-                newPassword: z.string().min(6, "Новый пароль должен быть не менее 6 символов"),
-            }),
-            handler: async ({ currentPassword, newPassword }, context) => {
-                const user = context.locals.user;
-                if (!user) throw new Error("Вы не авторизованы");
-
-                const [dbUser] = await db.select().from(users).where(eq(users.id, user.id));
-                if (!dbUser) throw new Error("Пользователь не найден");
-
-                const validPassword = await new Argon2id().verify(dbUser.passwordHash, currentPassword);
-                if (!validPassword) throw new Error("Текущий пароль введен неверно");
-
-                const hashedNewPassword = await new Argon2id().hash(newPassword);
-                await db.update(users).set({ passwordHash: hashedNewPassword }).where(eq(users.id, user.id));
-
-                return { success: true, message: "Пароль успешно изменен!" };
-            }
-        })
-    },
-
-    admin: {
-        updateTeacherDept: defineAction({
-            accept: 'json',
-            input: z.object({
-                teacherUuid: z.string(),
-                departmentIds: z.array(z.number())
-            }),
-            handler: async ({ teacherUuid, departmentIds }, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-                await db.update(teachersLocal).set({ departmentIds }).where(eq(teachersLocal.uuid, teacherUuid));
-                return { success: true };
-            }
-        }),
-
-        createProfile: defineAction({
-            accept: 'json',
-            input: z.object({
-                teacherUuid: z.string(),
-                username: z.string().min(3),
-                password: z.string().min(6),
-                departmentIds: z.array(z.number()),
-                role: z.enum(["TEACHER", "EMPLOYEE"]).default("TEACHER")
-            }),
-            handler: async (input, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-
-                const [existing] = await db.select().from(users).where(eq(users.username, input.username));
-                if (existing) throw new Error("Пользователь с таким логином уже существует");
-
-                const newUserId = crypto.randomUUID();
-                const hashedPassword = await new Argon2id().hash(input.password);
-
-                await db.insert(users).values({
-                    id: newUserId,
-                    username: input.username,
-                    passwordHash: hashedPassword,
-                    role: input.role,
-                    departmentIds: input.departmentIds,
-                    teacherUuid: input.teacherUuid
-                });
-
-                return { success: true, message: "Профиль успешно создан!" };
-            }
-        }),
-
-        changeRole: defineAction({
-            accept: 'json',
-            input: z.object({
-                teacherUuid: z.string(),
-                newRole: z.enum(["TEACHER", "EMPLOYEE"])
-            }),
-            handler: async ({ teacherUuid, newRole }, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-                await db.update(users).set({ role: newRole }).where(eq(users.teacherUuid, teacherUuid));
-                return { success: true };
-            }
-        }),
-
-        addDepartment: defineAction({
-            accept: 'json',
-            input: z.object({ name: z.string().min(2, "Название слишком короткое") }),
-            handler: async ({ name }, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-                const [newDept] = await db.insert(departments).values({ name }).returning();
-                return { success: true, department: newDept };
-            }
-        }),
-
-        updateDepartment: defineAction({
-            accept: 'json',
-            input: z.object({ id: z.number(), name: z.string().min(2) }),
-            handler: async ({ id, name }, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-                await db.update(departments).set({ name }).where(eq(departments.id, id));
-                return { success: true };
-            }
-        }),
-
-        deleteDepartment: defineAction({
-            accept: 'json',
-            input: z.object({ id: z.number() }),
-            handler: async ({ id }, context) => {
-                if (context.locals.user?.role !== 'ADMIN') throw new Error("Отказано в доступе");
-                await db.update(teachersLocal).set({ departmentIds: sql`array_remove(${teachersLocal.departmentIds}, ${id})` });
-                await db.update(users).set({ departmentIds: sql`array_remove(${users.departmentIds}, ${id})` });
-                await db.delete(departments).where(eq(departments.id, id));
-                return { success: true };
-            }
-        })
-    },
-
     scheduleOptions: {
         createRetake: defineAction({
             accept: 'json',
@@ -180,10 +31,10 @@ export const server = {
                             subjectUuid: input.subjectUuid,
                             date: input.date,
                             timeSlots: input.timeSlots,
-                            roomUuid: input.roomUuid, // Теперь это текст, ошибки не будет
+                            roomUuid: input.roomUuid,
                             link: input.link,
                             attemptNumber: input.attemptNumber,
-                            createdBy: userId,
+                            createdBy: String(userId),
                         }).returning({ id: retakes.id });
 
                         const teacherLinks = [];
@@ -232,7 +83,7 @@ export const server = {
         }),
         deleteRetake: defineAction({
             accept: 'json',
-            input: z.object({ id: z.coerce.number() }),
+            input: z.object({ id: z.string().uuid() }),
             handler: async ({ id }, context) => {
                 const user = context.locals.user;
                 if (!user) throw new Error("Вы не авторизованы");
@@ -240,7 +91,7 @@ export const server = {
                 const [retake] = await db.select().from(retakes).where(eq(retakes.id, id));
                 if (!retake) throw new Error("Пересдача не найдена");
 
-                if (user.role !== 'ADMIN' && retake.createdBy !== user.id) {
+                if (user.role !== 'ADMIN' && retake.createdBy !== String(user.id)) {
                     throw new Error("Вы можете удалять только те пересдачи, которые назначили сами");
                 }
 
@@ -281,7 +132,11 @@ export const server = {
                             r.timeSlots.forEach(slot => {
                                 mergedDay[slot] = {
                                     reason: 'Занято (Пересдача)',
-                                    details: { subject: 'Назначена пересдача в системе', type: `Попытка ${r.attemptNumber}`, location: r.link ? 'Онлайн' : (r.roomUuid || 'Очно') }
+                                    details: {
+                                        subject: 'Назначена пересдача в системе',
+                                        type: `Попытка ${r.attemptNumber}`,
+                                        location: r.link ? 'Онлайн' : (r.roomUuid || 'Очно')
+                                    }
                                 };
                             });
                         });

@@ -42,7 +42,7 @@ const selectGroup = (group: { uuid: string; number: string }) => {
 };
 
 const groupHistory = ref<{ subjectName: string; teacherNames: string[] }[]>([]);
-const existingGroupRetakes = ref<{ id: number; subjectUuid: string; attemptNumber: number; date: string; createdBy: string }[]>([]);
+const existingGroupRetakes = ref<{ id: string; subjectUuid: string; attemptNumber: number; date: string; createdBy: string }[]>([]);
 
 const sectionsCollapsed = ref({ slots: false, format: false, commission: false });
 
@@ -325,7 +325,7 @@ const submitRetake = async () => {
   }
 };
 
-const deleteRetake = async (id: number) => {
+const deleteRetake = async (id: string) => {
   if (!confirm('Вы уверены, что хотите удалить эту пересдачу?')) return;
   const { error } = await actions.scheduleOptions.deleteRetake({ id });
   if (error) {

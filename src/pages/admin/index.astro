@@ -1,140 +1,43 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import AdminManager from '../../components/AdminManager.vue';
-import { db } from '../../db';
-import { teachersLocal, departments, users } from '../../db/schema';
-import { eq, sql } from 'drizzle-orm';
 
 export const prerender = false;
 
-if (!Astro.locals.session) {
+const user = Astro.locals.user;
+if (!user) {
     return Astro.redirect('/login');
 }
 
-const sessionUser = Astro.locals.user;
-if (sessionUser?.role !== 'ADMIN') {
+if (user.role !== 'ADMIN') {
     return Astro.redirect('/dashboard');
 }
-
-const allDepartments = await db.select().from(departments).orderBy(departments.name);
-
-const allTeachers = await db.select({
-    uuid: teachersLocal.uuid,
-    fullName: teachersLocal.fullName,
-    departmentIds: teachersLocal.departmentIds,
-    hasProfile: sql<boolean>`${users.id} IS NOT NULL`.as('has_profile'),
-    userRole: users.role
-})
-    .from(teachersLocal)
-    .leftJoin(users, eq(teachersLocal.uuid, users.teacherUuid))
-    .orderBy(teachersLocal.fullName);
 ---
 
 <Layout title="Администратор">
-    <Fragment slot="nav-center">
-        <div class="hidden sm:flex items-center gap-2">
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl border border-gray-300 dark:border-white/10 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white/75 text-[10px] font-bold uppercase tracking-[0.18em] backdrop-blur-xl">
-    <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-    Администратор
-            </span>
-        </div>
-    </Fragment>
-
     <Fragment slot="nav-actions">
         <a
-                href="/dashboard"
-                class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
+            href="/dashboard"
+            class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
         >
             &larr; Дашборд
         </a>
     </Fragment>
 
-    <div class="relative">
-        <section class="relative overflow-hidden pt-10 sm:pt-12 pb-10 sm:pb-12">
-            <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(239,68,68,0.20),transparent_20%),radial-gradient(circle_at_84%_14%,rgba(59,130,246,0.14),transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_70%)] dark:bg-[radial-gradient(circle_at_14%_18%,rgba(239,68,68,0.22),transparent_20%),radial-gradient(circle_at_84%_14%,rgba(59,130,246,0.16),transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_70%)]"></div>
-                <div class="absolute inset-0 bg-[linear-gradient(to_right,#333333_1px,transparent_1px),linear-gradient(to_bottom,#333333_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.12] dark:opacity-[0.05]"></div>
-            </div>
-
-            <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="max-w-3xl">
-                    <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black tracking-[-0.05em] leading-[0.96] text-slate-950 dark:text-white">
-                        Панель
-                        <span class="block text-slate-600 dark:text-white/70">
-                            администратора
-                        </span>
-                    </h1>
-                </div>
-            </div>
-        </section>
-        <section class="relative z-10 pb-8">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="grid grid-cols-1 lg:grid-cols-[1.05fr_1.25fr] rounded-[28px] overflow-hidden shadow-[0_24px_80px_rgba(15,23,42,0.18)] border border-white/10">
-                    <div class="bg-red-500 px-6 py-7 sm:px-8 sm:py-8 text-white">
-                        <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-white/70 font-bold">
-                            Раздел
-                        </p>
-                        <h2 class="mt-3 text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-                            Управление
-                            сотрудниками и кафедрами
-                        </h2>
-                        <p class="mt-4 text-sm sm:text-base text-white/80 max-w-md leading-7">
-                            Здесь можно назначать роли, создавать профили
-                            и поддерживать структуру кафедр в актуальном состоянии.
-                        </p>
-                    </div>
-
-                    <div class="bg-white dark:bg-[#111318] px-6 py-7 sm:px-8 sm:py-8">
-                        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
-                            <div>
-                                <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500 font-bold">
-                                    Статистика
-                                </p>
-                                <h3 class="mt-3 text-2xl sm:text-3xl font-black tracking-tight text-slate-950 dark:text-white">
-                                    Административный
-                                    <br class="hidden sm:block" />
-                                    контроль системы
-                                </h3>
-                            </div>
-
-                            <div class="shrink-0">
-                                <div class="text-5xl sm:text-6xl font-black tracking-[-0.06em] text-slate-950 dark:text-white">
-                                    {allTeachers.length}
-                                </div>
-                                <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                    сотрудников в системе
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Main content -->
-        <section class="relative z-10 pb-16 sm:pb-20">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="mb-6 sm:mb-8">
-                    <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500 font-bold">
-                        Основной раздел
-                    </p>
-                    <h2 class="mt-3 text-2xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                        Сотрудники и кафедры
-                    </h2>
-                    <p class="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-7">
-                        Управляйте профилями преподавателей, диспетчерами и структурой кафедр
-                        в едином административном интерфейсе.
-                    </p>
-                </div>
-
-                <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] p-3 sm:p-4 lg:p-5">
-                    <AdminManager
-                            client:load
-                            teachers={allTeachers}
-                            departments={allDepartments}
-                    />
-                </div>
-            </div>
-        </section>
-    </div>
+    <section class="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] p-8 sm:p-10">
+            <p class="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500 font-bold">
+                Migration status
+            </p>
+            <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
+                Админ-панель временно отключена
+            </h1>
+            <p class="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-3xl leading-7">
+                Старый экран администратора был построен поверх frontend users/auth-таблиц и Astro actions. Чтобы проект больше не
+                держался на Lucia и локальной auth-схеме, этот раздел временно выведен из рабочего контура.
+            </p>
+            <p class="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-3xl leading-7">
+                Авторизация уже работает только через backend FastAPI. Возврат админского CRUD нужно делать отдельным шагом поверх backend API и backend users-модели.
+            </p>
+        </div>
+    </section>
 </Layout>

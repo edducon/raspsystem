@@ -1,34 +1,13 @@
 import { defineMiddleware } from "astro:middleware";
-
-const authMode = import.meta.env.FRONTEND_AUTH_MODE ?? "disabled";
+import { fetchCurrentUser } from "./lib/backend-auth";
 
 export const onRequest = defineMiddleware(async (context, next) => {
-    if (authMode !== "legacy") {
+    try {
+        context.locals.user = await fetchCurrentUser(context.request);
+    } catch (error) {
+        console.error("Failed to resolve backend auth session", error);
         context.locals.user = null;
-        context.locals.session = null;
-        return next();
     }
-
-    const { lucia } = await import("./lib/auth");
-    const sessionId = context.cookies.get(lucia.sessionCookieName)?.value ?? null;
-    if (!sessionId) {
-        context.locals.user = null;
-        context.locals.session = null;
-        return next();
-    }
-
-    const { session, user } = await lucia.validateSession(sessionId);
-    if (session && session.fresh) {
-        const sessionCookie = lucia.createSessionCookie(session.id);
-        context.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-    }
-    if (!session) {
-        const sessionCookie = lucia.createBlankSessionCookie();
-        context.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-    }
-
-    context.locals.user = user;
-    context.locals.session = session;
 
     return next();
 });

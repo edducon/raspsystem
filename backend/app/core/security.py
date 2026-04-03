@@ -11,8 +11,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    salt_b64, digest_b64 = stored_hash.split(":", 1)
-    salt = base64.b64decode(salt_b64.encode())
-    expected = base64.b64decode(digest_b64.encode())
-    actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
-    return hmac.compare_digest(actual, expected)
+    try:
+        salt_b64, digest_b64 = stored_hash.split(":", 1)
+        salt = base64.b64decode(salt_b64.encode())
+        expected = base64.b64decode(digest_b64.encode())
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False

@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
     debug: bool = True
+    session_secret_key: str = Field(default="change-me", alias="SESSION_SECRET_KEY")
+    session_cookie_name: str = Field(default="raspsystem_session", alias="SESSION_COOKIE_NAME")
+    session_max_age: int = Field(default=60 * 60 * 24 * 7, alias="SESSION_MAX_AGE")
+    frontend_origins_raw: str = Field(
+        default="http://localhost:4321,http://127.0.0.1:4321",
+        alias="FRONTEND_ORIGINS",
+    )
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     postgres_server: str = Field(default="postgres", alias="POSTGRES_SERVER")
@@ -39,6 +46,10 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+    @property
+    def frontend_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.frontend_origins_raw.split(",") if origin.strip()]
 
 
 @lru_cache

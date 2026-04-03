@@ -77,7 +77,7 @@ const mergedDaySchedule = computed(() => {
 
   const targetTime = parseDateString(activeDay.dateStr);
   const items: any[] = [];
-  const processedRetakeIds = new Set<number>();
+  const processedRetakeIds = new Set<string>();
 
   const todaysRetakes = props.retakes.filter(r => r.date === activeDay.dateStr);
 

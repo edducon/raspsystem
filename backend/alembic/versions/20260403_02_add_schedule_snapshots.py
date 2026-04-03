@@ -19,7 +19,7 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(length=50), nullable=False, server_default="raspyx"),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("is_reference_for_retakes", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("captured_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("captured_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_schedule_snapshots_name", "schedule_snapshots", ["name"], unique=False)

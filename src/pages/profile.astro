@@ -3,7 +3,8 @@ export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
-import { users, teachersLocal, departments } from '../db/schema';
+import { departments, teachersLocal } from '../db/schema';
+import { getPublicBackendApiUrl } from '../lib/backend-auth';
 import { eq, inArray } from 'drizzle-orm';
 
 const user = Astro.locals.user;
@@ -11,208 +12,153 @@ if (!user) {
     return Astro.redirect('/login');
 }
 
-const [profileData] = await db.select({
-    username: users.username,
-    role: users.role,
-    fullName: teachersLocal.fullName,
-    departmentIds: teachersLocal.departmentIds
-})
-    .from(users)
-    .leftJoin(teachersLocal, eq(users.teacherUuid, teachersLocal.uuid))
-    .where(eq(users.id, user.id));
+const [teacherProfile] = user.teacherUuid
+    ? await db.select({
+        fullName: teachersLocal.fullName,
+    }).from(teachersLocal).where(eq(teachersLocal.uuid, user.teacherUuid))
+    : [];
 
-let userDepartmentsNames: string[] = [];
-if (profileData?.departmentIds && profileData.departmentIds.length > 0) {
-    const depts = await db.select({ name: departments.name })
+let departmentNames: string[] = [];
+if (user.departmentIds.length > 0) {
+    const rows = await db.select({ name: departments.name })
         .from(departments)
-        .where(inArray(departments.id, profileData.departmentIds));
-    userDepartmentsNames = depts.map(d => d.name);
+        .where(inArray(departments.id, user.departmentIds));
+    departmentNames = rows.map((row) => row.name);
 }
 
-const displayName = profileData?.fullName || (profileData?.role === 'ADMIN' ? 'Главный Администратор' : 'Сотрудник');
-const initial = displayName.charAt(0).toUpperCase();
-
-let roleLabel = 'Преподаватель';
-let roleClass = 'bg-slate-100 dark:bg-white/[0.05] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10';
-if (profileData?.role === 'ADMIN') {
-    roleLabel = 'Администратор';
-    roleClass = 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20';
-} else if (profileData?.role === 'EMPLOYEE') {
-    roleLabel = 'Диспетчер';
-    roleClass = 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20';
-}
+const displayName = teacherProfile?.fullName || user.fullName || user.username;
+const roleLabel = user.role === 'ADMIN' ? 'Администратор' : user.role === 'EMPLOYEE' ? 'Диспетчер' : 'Преподаватель';
+const backendApiUrl = getPublicBackendApiUrl();
 ---
 
 <Layout title="Профиль">
     <Fragment slot="nav-actions">
         <a
-                href="/dashboard"
-                class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
+            href="/dashboard"
+            class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
         >
             &larr; Дашборд
         </a>
     </Fragment>
 
-    <div class="relative">
-        <section class="relative overflow-hidden pt-10 sm:pt-12 pb-10 sm:pb-12">
-            <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(239,68,68,0.20),transparent_20%),radial-gradient(circle_at_84%_16%,rgba(59,130,246,0.14),transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_70%)] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(239,68,68,0.24),transparent_20%),radial-gradient(circle_at_84%_16%,rgba(59,130,246,0.16),transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_70%)]"></div>
-                <div class="absolute inset-0 bg-[linear-gradient(to_right,#333333_1px,transparent_1px),linear-gradient(to_bottom,#333333_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:40px_40px] opacity-[0.12] dark:opacity-[0.05]"></div>
-            </div>
-
-            <div class="relative max-w-5xl mx-auto px-4 sm:px-6">
-                <div class="max-w-3xl">
-                    <div class="inline-flex items-center gap-2 rounded-full border border-gray-300 dark:border-white/10 bg-gray-100 dark:bg-white/5 backdrop-blur-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] text-gray-700 dark:text-white/70 mb-5">
-                        <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-                        Профиль пользователя
-                    </div>
-
-                    <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black tracking-[-0.05em] leading-[0.96] text-slate-950 dark:text-white">
-                        Личный
-                        <span class="block text-slate-600 dark:text-white/70">
-                            профиль
-                        </span>
-                    </h1>
+    <section class="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] overflow-hidden">
+            <div class="px-6 py-8 sm:px-8 sm:py-9 border-b border-slate-100 dark:border-white/10">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
+                    Backend user profile
+                </p>
+                <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
+                    {displayName}
+                </h1>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <span class="px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
+                        {roleLabel}
+                    </span>
+                    <span class="font-mono text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 px-3 py-1 rounded-xl">
+                        {user.username}
+                    </span>
                 </div>
+
+                {departmentNames.length > 0 && (
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        {departmentNames.map((department) => (
+                            <span class="text-xs bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 px-3 py-1 rounded-full font-semibold">
+                                {department}
+                            </span>
+                        ))}
+                    </div>
+                )}
             </div>
-        </section>
-        <section class="relative z-10 pb-16 sm:pb-20">
-            <div class="max-w-3xl mx-auto px-4 sm:px-6">
-                <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] overflow-hidden">
-                    <div class="relative overflow-hidden border-b border-slate-100 dark:border-white/10">
-                        <div class="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(239,68,68,0.10),transparent_24%),radial-gradient(circle_at_82%_18%,rgba(59,130,246,0.10),transparent_20%)] dark:bg-[radial-gradient(circle_at_18%_20%,rgba(239,68,68,0.14),transparent_24%),radial-gradient(circle_at_82%_18%,rgba(59,130,246,0.12),transparent_20%)]"></div>
 
-                        <div class="relative px-6 py-8 sm:px-8 sm:py-9 flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                            <div class="w-20 h-20 rounded-[24px] bg-gradient-to-br from-red-500 via-red-600 to-blue-600 flex items-center justify-center text-white text-3xl font-black shadow-[0_16px_40px_rgba(239,68,68,0.24)] shrink-0">
-                                {initial}
-                            </div>
-
-                            <div class="text-center sm:text-left min-w-0">
-                                <h2 class="text-2xl sm:text-3xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                                    {displayName}
-                                </h2>
-
-                                <div class="flex flex-wrap justify-center sm:justify-start items-center gap-2 mt-3">
-                                    <span class={`px-3 py-1 rounded-xl text-xs font-bold ${roleClass}`}>
-                                        {roleLabel}
-                                    </span>
-
-                                    <span class="font-mono text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 px-3 py-1 rounded-xl">
-                                        {profileData?.username}
-                                    </span>
-                                </div>
-
-                                {userDepartmentsNames.length > 0 && (
-                                        <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-4">
-                                            {userDepartmentsNames.map(dept => (
-                                                    <span class="text-xs bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 px-3 py-1 rounded-full font-semibold">
-                                                {dept}
-                                            </span>
-                                            ))}
-                                        </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="px-6 py-7 sm:px-8 sm:py-8">
-                        <div class="mb-6">
-                            <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                                Безопасность
-                            </p>
-                            <h3 class="mt-2 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
-                                Смена пароля
-                            </h3>
-                            <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-lg leading-7">
-                                Используйте надёжный пароль и регулярно обновляйте его для защиты аккаунта.
-                            </p>
-                        </div>
-
-                        <form id="password-form" class="max-w-md space-y-5">
-                            <div id="status-message" class="hidden rounded-2xl px-4 py-3.5 text-sm font-medium"></div>
-
-                            <div>
-                                <label
-                                        for="currentPassword"
-                                        class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]"
-                                >
-                                    Текущий пароль
-                                </label>
-
-                                <input
-                                        type="password"
-                                        name="currentPassword"
-                                        id="currentPassword"
-                                        required
-                                        class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all"
-                                />
-                            </div>
-
-                            <div>
-                                <label
-                                        for="newPassword"
-                                        class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]"
-                                >
-                                    Новый пароль
-                                </label>
-
-                                <input
-                                        type="password"
-                                        name="newPassword"
-                                        id="newPassword"
-                                        required
-                                        minlength="6"
-                                        class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all"
-                                />
-
-                                <p class="text-xs text-slate-400 mt-2 leading-5">
-                                    Минимум 6 символов
-                                </p>
-                            </div>
-
-                            <div class="pt-2">
-                                <button
-                                        type="submit"
-                                        id="submit-btn"
-                                        class="h-12 px-6 bg-red-500 hover:bg-red-600 text-white text-sm font-black rounded-2xl shadow-[0_16px_40px_rgba(239,68,68,0.22)] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 hover:-translate-y-0.5"
-                                >
-                                    <span>Сохранить</span>
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+            <div class="px-6 py-7 sm:px-8 sm:py-8">
+                <div class="mb-6">
+                    <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
+                        Безопасность
+                    </p>
+                    <h2 class="mt-2 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
+                        Смена пароля
+                    </h2>
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-lg leading-7">
+                        Пароль обновляется через backend endpoint и больше не использует Astro actions или Lucia.
+                    </p>
                 </div>
+
+                <form id="password-form" class="max-w-md space-y-5">
+                    <div id="status-message" class="hidden rounded-2xl px-4 py-3.5 text-sm font-medium"></div>
+
+                    <div>
+                        <label for="currentPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+                            Текущий пароль
+                        </label>
+                        <input id="currentPassword" name="currentPassword" type="password" required class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
+                    </div>
+
+                    <div>
+                        <label for="newPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+                            Новый пароль
+                        </label>
+                        <input id="newPassword" name="newPassword" type="password" required minlength="6" class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
+                    </div>
+
+                    <button id="submit-btn" type="submit" class="h-12 px-6 bg-red-500 hover:bg-red-600 text-white text-sm font-black rounded-2xl shadow-[0_16px_40px_rgba(239,68,68,0.22)] transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                        <span>Сохранить</span>
+                    </button>
+                </form>
             </div>
-        </section>
-    </div>
+        </div>
+    </section>
 
     <script>
-        import { actions } from 'astro:actions';
+        const backendApiUrl = {JSON.stringify(backendApiUrl)};
+        const form = document.querySelector('#password-form');
+        const statusDiv = document.querySelector('#status-message');
+        const submitBtn = document.querySelector('#submit-btn');
 
-        const form = document.querySelector('#password-form') as HTMLFormElement;
-        const statusDiv = document.querySelector('#status-message') as HTMLDivElement;
-        const submitBtn = document.querySelector('#submit-btn') as HTMLButtonElement;
+        form?.addEventListener('submit', async (event) => {
+            event.preventDefault();
 
-        form?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            submitBtn.disabled = true;
-            submitBtn.querySelector('span')!.textContent = 'Сохранение...';
-            statusDiv.className = 'hidden rounded-2xl px-4 py-3.5 text-sm font-medium';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.querySelector('span').textContent = 'Сохранение...';
+            }
+            if (statusDiv) {
+                statusDiv.className = 'hidden rounded-2xl px-4 py-3.5 text-sm font-medium';
+            }
 
             const formData = new FormData(form);
-            const { data, error } = await actions.auth.changePassword(formData);
+            const response = await fetch(`${backendApiUrl}/auth/change-password`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    current_password: formData.get('currentPassword'),
+                    new_password: formData.get('newPassword'),
+                }),
+            });
 
-            submitBtn.disabled = false;
-            submitBtn.querySelector('span')!.textContent = 'Сохранить';
-
-            if (error) {
-                statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20';
-                statusDiv.textContent = error.message;
-            } else {
-                statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20';
-                statusDiv.textContent = data.message;
-                form.reset();
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.querySelector('span').textContent = 'Сохранить';
             }
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                if (statusDiv) {
+                    statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20';
+                    statusDiv.textContent = payload.detail ?? 'Не удалось обновить пароль';
+                }
+                return;
+            }
+
+            const payload = await response.json();
+            if (statusDiv) {
+                statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20';
+                statusDiv.textContent = payload.message;
+            }
+            form.reset();
         });
     </script>
 </Layout>

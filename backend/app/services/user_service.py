@@ -30,12 +30,22 @@ class UserService:
                 detail="Department not found",
             )
 
+        existing_user = self.db.scalar(select(User).where(User.username == data.username))
+        if existing_user is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists",
+            )
+
         user = User(
+            username=data.username,
             full_name=data.full_name,
             password_hash=hash_password(data.password),
             role=data.role,
             is_active=data.is_active,
             department_id=data.department_id,
+            department_ids=data.department_ids,
+            teacher_uuid=data.teacher_uuid,
         )
         self.db.add(user)
         self.db.commit()
@@ -51,10 +61,25 @@ class UserService:
                 detail="Department not found",
             )
 
+        existing_user = self.db.scalar(
+            select(User).where(
+                User.username == data.username,
+                User.id != user_id,
+            )
+        )
+        if existing_user is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists",
+            )
+
+        user.username = data.username
         user.full_name = data.full_name
         user.role = data.role
         user.is_active = data.is_active
         user.department_id = data.department_id
+        user.department_ids = data.department_ids
+        user.teacher_uuid = data.teacher_uuid
         user.password_hash = hash_password(data.password)
         self.db.commit()
         self.db.refresh(user)

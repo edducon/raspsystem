@@ -1,3 +1,5 @@
+from datetime import datetime, UTC
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,7 +43,7 @@ class ScheduleSnapshotService:
             source_type=data.source_type,
             description=data.description,
             is_reference_for_retakes=data.is_reference_for_retakes,
-            captured_at=data.captured_at,
+            captured_at=data.captured_at or datetime.now(UTC),
         )
         self.db.add(snapshot)
         self.db.commit()
@@ -67,7 +69,7 @@ class ScheduleSnapshotService:
         snapshot.source_type = data.source_type
         snapshot.description = data.description
         snapshot.is_reference_for_retakes = data.is_reference_for_retakes
-        snapshot.captured_at = data.captured_at
+        snapshot.captured_at = data.captured_at or snapshot.captured_at
         self.db.commit()
         self.db.refresh(snapshot)
         return snapshot

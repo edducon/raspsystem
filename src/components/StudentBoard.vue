@@ -30,8 +30,8 @@ function dismissInfo() {
   localStorage.setItem(INFO_KEY, '1');
 }
 
-const openCommissions = ref<Set<number>>(new Set());
-function toggleCommission(id: number) {
+const openCommissions = ref<Set<string>>(new Set());
+function toggleCommission(id: string) {
   const s = new Set(openCommissions.value);
   s.has(id) ? s.delete(id) : s.add(id);
   openCommissions.value = s;
