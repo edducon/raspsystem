@@ -22,7 +22,7 @@ if (user.teacherUuid) {
 let departmentNames: string[] = [];
 if (user.departmentIds.length > 0) {
     try {
-        const departments = await fetchBackendFromServer('/departments/');
+        const departments = await fetchBackendFromServer('/departments/', {}, Astro.request);
         departmentNames = departments
             .filter((department: any) => user.departmentIds.includes(department.id))
             .map((department: any) => department.name);
@@ -112,8 +112,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         </div>
     </section>
 
-    <script>
-        const backendApiUrl = {JSON.stringify(backendApiUrl)};
+    <script define:vars={{ backendApiUrl }}>
         const form = document.querySelector('#password-form');
         const statusDiv = document.querySelector('#status-message');
         const submitBtn = document.querySelector('#submit-btn');

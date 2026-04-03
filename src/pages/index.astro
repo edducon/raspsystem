@@ -3,7 +3,6 @@ export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import StudentBoard from '../components/StudentBoard.vue';
-import { RaspyxAPI } from '../lib/api-client';
 import { fetchBackendFromServer } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
 
@@ -11,12 +10,12 @@ let apiGroups = [];
 let apiSubjects = [];
 let allRetakes = [];
 try {
-    const [[groupsRes, subjectsRes], retakesRes] = await Promise.all([
-        Promise.all([RaspyxAPI.getGroups(), RaspyxAPI.getSubjects()]),
+    const [dictionaries, retakesRes] = await Promise.all([
+        fetchBackendFromServer('/schedule-data/dictionaries'),
         fetchBackendFromServer('/retakes/'),
     ]);
-    if (groupsRes?.result) apiGroups = groupsRes.result;
-    if (subjectsRes?.result) apiSubjects = subjectsRes.result;
+    apiGroups = dictionaries?.groups ?? [];
+    apiSubjects = dictionaries?.subjects ?? [];
     allRetakes = retakesRes;
 } catch (error) {
     console.error('Failed to load public retakes', error);

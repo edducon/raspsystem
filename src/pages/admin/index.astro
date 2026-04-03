@@ -1,5 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import { fetchBackendFromServer } from '../../lib/backend-api';
+import { getPublicBackendApiUrl } from '../../lib/backend-auth';
 
 export const prerender = false;
 
@@ -11,6 +13,28 @@ if (!user) {
 if (user.role !== 'ADMIN') {
     return Astro.redirect('/dashboard');
 }
+
+let users = [];
+let departments = [];
+let teacherDirectory = [];
+let loadError = '';
+
+try {
+    const [usersRes, departmentsRes, teacherDirectoryRes] = await Promise.all([
+        fetchBackendFromServer('/users/', {}, Astro.request),
+        fetchBackendFromServer('/departments/', {}, Astro.request),
+        fetchBackendFromServer('/teacher-directory/', {}, Astro.request),
+    ]);
+
+    users = usersRes;
+    departments = departmentsRes;
+    teacherDirectory = teacherDirectoryRes;
+} catch (error) {
+    console.error('Failed to load admin data', error);
+    loadError = error instanceof Error ? error.message : 'Не удалось загрузить backend admin data';
+}
+
+const backendApiUrl = getPublicBackendApiUrl();
 ---
 
 <Layout title="Администратор">
@@ -23,21 +47,226 @@ if (user.role !== 'ADMIN') {
         </a>
     </Fragment>
 
-    <section class="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-8">
         <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] p-8 sm:p-10">
             <p class="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500 font-bold">
-                Migration status
+                Backend admin
             </p>
             <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                Админ-панель временно отключена
+                Админ-панель на backend API
             </h1>
             <p class="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-3xl leading-7">
-                Старый экран администратора был построен поверх frontend users/auth-таблиц и Astro actions. Чтобы проект больше не
-                держался на Lucia и локальной auth-схеме, этот раздел временно выведен из рабочего контура.
+                Этот экран больше не зависит от frontend users/auth/data схемы. Данные загружаются только из backend FastAPI через
+                `users`, `departments`, `teacher-directory` и maintenance endpoints.
             </p>
-            <p class="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-3xl leading-7">
-                Авторизация уже работает только через backend FastAPI. Возврат админского CRUD нужно делать отдельным шагом поверх backend API и backend users-модели.
-            </p>
+
+            {loadError && (
+                <div class="mt-6 rounded-[24px] border border-red-200 dark:border-red-500/20 bg-red-50/80 dark:bg-red-500/10 px-5 py-4 text-sm text-red-700 dark:text-red-300">
+                    {loadError}
+                </div>
+            )}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="rounded-[28px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Users</p>
+                <div class="mt-3 text-4xl font-black tracking-[-0.06em] text-slate-950 dark:text-white">{users.length}</div>
+            </div>
+            <div class="rounded-[28px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Departments</p>
+                <div class="mt-3 text-4xl font-black tracking-[-0.06em] text-slate-950 dark:text-white">{departments.length}</div>
+            </div>
+            <div class="rounded-[28px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Teacher Directory</p>
+                <div class="mt-3 text-4xl font-black tracking-[-0.06em] text-slate-950 dark:text-white">{teacherDirectory.length}</div>
+            </div>
+        </div>
+
+        <div class="rounded-[32px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.10)] p-8">
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+                <div>
+                    <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
+                        Maintenance
+                    </p>
+                    <h2 class="mt-3 text-2xl sm:text-3xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
+                        Retakes backend operations
+                    </h2>
+                    <p class="mt-3 text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-7">
+                        Импорт past semester теперь выполняется самим backend, а очистка retakes больше не использует Astro API route и frontend DB layer.
+                    </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button
+                        id="import-past-btn"
+                        class="h-12 px-6 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black shadow-[0_16px_40px_rgba(37,99,235,0.24)] transition-all"
+                    >
+                        Импортировать past semester
+                    </button>
+                    <button
+                        id="reset-retakes-btn"
+                        class="h-12 px-6 rounded-2xl bg-red-500 hover:bg-red-600 text-white text-sm font-black shadow-[0_16px_40px_rgba(239,68,68,0.24)] transition-all"
+                    >
+                        Очистить retakes
+                    </button>
+                </div>
+            </div>
+
+            <div id="maintenance-status" class="hidden mt-5 rounded-[22px] px-5 py-4 text-sm font-medium"></div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="rounded-[32px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] shadow-[0_24px_80px_rgba(15,23,42,0.10)] overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-100 dark:border-white/10">
+                    <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Users</p>
+                    <h2 class="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-white">Backend users</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 dark:bg-black/10 text-slate-500 dark:text-slate-400">
+                            <tr>
+                                <th class="text-left px-4 py-3 font-bold">Username</th>
+                                <th class="text-left px-4 py-3 font-bold">Full name</th>
+                                <th class="text-left px-4 py-3 font-bold">Role</th>
+                                <th class="text-left px-4 py-3 font-bold">Active</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map((entry: any) => (
+                                <tr class="border-t border-slate-100 dark:border-white/10">
+                                    <td class="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{entry.username}</td>
+                                    <td class="px-4 py-3 text-slate-800 dark:text-slate-200">{entry.fullName}</td>
+                                    <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{entry.role}</td>
+                                    <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{entry.isActive ? 'Yes' : 'No'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="rounded-[32px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] shadow-[0_24px_80px_rgba(15,23,42,0.10)] overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-100 dark:border-white/10">
+                    <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Departments</p>
+                    <h2 class="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-white">Backend departments</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 dark:bg-black/10 text-slate-500 dark:text-slate-400">
+                            <tr>
+                                <th class="text-left px-4 py-3 font-bold">ID</th>
+                                <th class="text-left px-4 py-3 font-bold">Name</th>
+                                <th class="text-left px-4 py-3 font-bold">Short name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {departments.map((entry: any) => (
+                                <tr class="border-t border-slate-100 dark:border-white/10">
+                                    <td class="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{entry.id}</td>
+                                    <td class="px-4 py-3 text-slate-800 dark:text-slate-200">{entry.name}</td>
+                                    <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{entry.short_name}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-[32px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] shadow-[0_24px_80px_rgba(15,23,42,0.10)] overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-100 dark:border-white/10">
+                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">Teacher Directory</p>
+                <h2 class="mt-2 text-xl font-black tracking-tight text-slate-950 dark:text-white">Local teachers for retakes</h2>
+            </div>
+            <div class="overflow-x-auto max-h-[520px]">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 dark:bg-black/10 text-slate-500 dark:text-slate-400 sticky top-0">
+                        <tr>
+                            <th class="text-left px-4 py-3 font-bold">UUID</th>
+                            <th class="text-left px-4 py-3 font-bold">Full name</th>
+                            <th class="text-left px-4 py-3 font-bold">Departments</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {teacherDirectory.map((entry: any) => (
+                            <tr class="border-t border-slate-100 dark:border-white/10">
+                                <td class="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{entry.uuid}</td>
+                                <td class="px-4 py-3 text-slate-800 dark:text-slate-200">{entry.fullName}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{(entry.departmentIds || []).join(', ') || '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </section>
+
+    <script define:vars={{ backendApiUrl }}>
+        const statusBox = document.querySelector('#maintenance-status');
+        const importBtn = document.querySelector('#import-past-btn');
+        const resetBtn = document.querySelector('#reset-retakes-btn');
+
+        const setStatus = (kind, message) => {
+            if (!statusBox) return;
+            statusBox.className = `mt-5 rounded-[22px] px-5 py-4 text-sm font-medium ${
+                kind === 'error'
+                    ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/20'
+                    : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20'
+            }`;
+            statusBox.textContent = message;
+        };
+
+        const withLoading = async (button, action) => {
+            if (!button) return;
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Выполняется...';
+            try {
+                await action();
+            } finally {
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        };
+
+        importBtn?.addEventListener('click', () => withLoading(importBtn, async () => {
+            const response = await fetch(`${backendApiUrl}/retakes/admin/past-semester/import`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                setStatus('error', payload.detail ?? 'Не удалось импортировать past semester');
+                return;
+            }
+
+            setStatus('success', `${payload.message}. Source: ${payload.sourcePath}`);
+        }));
+
+        resetBtn?.addEventListener('click', () => withLoading(resetBtn, async () => {
+            if (!confirm('Удалить все retakes и связи retake_teachers?')) return;
+
+            const response = await fetch(`${backendApiUrl}/retakes/admin/reset`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                setStatus('error', payload.detail ?? 'Не удалось очистить retakes');
+                return;
+            }
+
+            setStatus('success', `${payload.message}. Retakes: ${payload.deletedRetakes}, links: ${payload.deletedTeacherLinks}`);
+        }));
+    </script>
 </Layout>

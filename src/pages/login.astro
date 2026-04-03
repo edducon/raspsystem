@@ -76,8 +76,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         </div>
     </section>
 
-    <script>
-        const backendApiUrl = {JSON.stringify(backendApiUrl)};
+    <script define:vars={{ backendApiUrl }}>
         const form = document.querySelector('#login-form');
         const errorDiv = document.querySelector('#error-message');
         const submitBtn = document.querySelector('#submit-btn');

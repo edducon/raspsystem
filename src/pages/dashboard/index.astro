@@ -2,7 +2,6 @@
 import Layout from '../../layouts/Layout.astro';
 import RetakeScheduler from '../../components/RetakeScheduler.vue';
 import TeacherBoard from '../../components/TeacherBoard.vue';
-import { RaspyxAPI } from '../../lib/api-client';
 import { fetchBackendFromServer } from '../../lib/backend-api';
 import { getPublicBackendApiUrl } from '../../lib/backend-auth';
 import { cleanSubjectName } from '../../lib/subjectNorm';
@@ -26,12 +25,9 @@ let localTeachers = [];
 
 if (canSchedule || hasOwnSchedule) {
     try {
-        const [groupsRes, subjectsRes] = await Promise.all([
-            RaspyxAPI.getGroups(),
-            RaspyxAPI.getSubjects(),
-        ]);
-        if (groupsRes?.result) apiGroups = groupsRes.result;
-        if (subjectsRes?.result) apiSubjects = subjectsRes.result;
+        const dictionaries = await fetchBackendFromServer('/schedule-data/dictionaries', {}, Astro.request);
+        apiGroups = dictionaries?.groups ?? [];
+        apiSubjects = dictionaries?.subjects ?? [];
     } catch (error) {
         console.error('Failed to load dictionaries', error);
     }
@@ -51,18 +47,13 @@ let teacherRetakesFormatted = [];
 
 if (hasOwnSchedule) {
     try {
-        const teacherRow = user.teacherUuid
-            ? await fetchBackendFromServer(`/teacher-directory/${user.teacherUuid}`, {}, Astro.request)
+        const teacherSchedule = user.teacherUuid
+            ? await fetchBackendFromServer(`/schedule-data/teacher/${user.teacherUuid}`, {}, Astro.request)
             : null;
 
-        if (teacherRow) {
-            teacherFullName = teacherRow.fullName;
-            try {
-                const scheduleRes = await RaspyxAPI.getTeacherSchedule(teacherRow.fullName);
-                teacherBaseSchedule = scheduleRes?.result ?? null;
-            } catch (error) {
-                console.error('Failed to load teacher schedule', error);
-            }
+        if (teacherSchedule) {
+            teacherFullName = teacherSchedule.teacherFullName;
+            teacherBaseSchedule = teacherSchedule.schedule ?? null;
         }
 
         const myRetakes = await fetchBackendFromServer('/retakes/mine', {}, Astro.request);
@@ -157,8 +148,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         )}
     </section>
 
-    <script>
-        const backendApiUrl = {JSON.stringify(backendApiUrl)};
+    <script define:vars={{ backendApiUrl }}>
         const logoutBtn = document.querySelector('#logout-btn');
 
         logoutBtn?.addEventListener('click', async () => {

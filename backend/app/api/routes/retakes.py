@@ -4,10 +4,16 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import (
     get_current_active_user,
     get_optional_current_user,
+    require_admin,
     require_scheduler_roles,
 )
 from app.db.session import get_db
 from app.models import User
+from app.schemas.retake_admin import (
+    PastSemesterImportRequest,
+    PastSemesterImportResponse,
+    RetakeResetResponse,
+)
 from app.schemas.retake import (
     GroupHistoryEntryRead,
     GroupRetakeRead,
@@ -17,6 +23,7 @@ from app.schemas.retake import (
     RetakeRead,
     TeacherRetakeRead,
 )
+from app.services.retake_admin_service import RetakeAdminService
 from app.services.retake_service import RetakeService
 
 router = APIRouter(prefix="/retakes", tags=["retakes"])
@@ -72,6 +79,23 @@ def create_retake(
     db: Session = Depends(get_db),
 ) -> RetakeRead:
     return RetakeService(db).create_retake(data=payload, user=current_user)
+
+
+@router.post("/admin/past-semester/import", response_model=PastSemesterImportResponse)
+def import_past_semester(
+    payload: PastSemesterImportRequest | None = None,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> PastSemesterImportResponse:
+    return RetakeAdminService(db).import_past_semester(source_path=payload.source_path if payload else None)
+
+
+@router.post("/admin/reset", response_model=RetakeResetResponse)
+def reset_retakes(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> RetakeResetResponse:
+    return RetakeAdminService(db).reset_retakes()
 
 
 @router.delete("/{retake_id}", status_code=status.HTTP_204_NO_CONTENT)
