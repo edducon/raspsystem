@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+import app.models  # noqa: F401
 from app.api.router import api_router
 from app.core.config import settings
 
