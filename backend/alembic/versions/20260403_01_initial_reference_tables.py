@@ -32,14 +32,12 @@ def upgrade() -> None:
         "teachers",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
         sa.Column("full_name", sa.String(length=255), nullable=False),
-        sa.Column("email", sa.String(length=255), nullable=True),
         sa.Column("department_id", sa.Integer(), nullable=False),
         sa.Column("position_id", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(["department_id"], ["departments.id"]),
         sa.ForeignKeyConstraint(["position_id"], ["positions.id"]),
     )
     op.create_index("ix_teachers_full_name", "teachers", ["full_name"], unique=False)
-    op.create_index("ix_teachers_email", "teachers", ["email"], unique=True)
     op.create_index("ix_teachers_department_id", "teachers", ["department_id"], unique=False)
     op.create_index("ix_teachers_position_id", "teachers", ["position_id"], unique=False)
 
@@ -47,25 +45,21 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
         sa.Column("full_name", sa.String(length=255), nullable=False),
-        sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("role", sa.String(length=50), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("department_id", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(["department_id"], ["departments.id"]),
     )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
     op.create_index("ix_users_role", "users", ["role"], unique=False)
 
 
 def downgrade() -> None:
     op.drop_index("ix_users_role", table_name="users")
-    op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")
 
     op.drop_index("ix_teachers_position_id", table_name="teachers")
     op.drop_index("ix_teachers_department_id", table_name="teachers")
-    op.drop_index("ix_teachers_email", table_name="teachers")
     op.drop_index("ix_teachers_full_name", table_name="teachers")
     op.drop_table("teachers")
 

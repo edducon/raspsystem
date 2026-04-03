@@ -1,9 +1,8 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class TeacherBase(BaseModel):
     full_name: str
-    email: EmailStr | None = None
     department_id: int
     position_id: int | None = None
 

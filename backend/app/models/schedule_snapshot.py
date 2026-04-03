@@ -18,5 +18,5 @@ class ScheduleSnapshot(Base):
     source_type: Mapped[str] = mapped_column(String(50), default="raspyx")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_reference_for_retakes: Mapped[bool] = mapped_column(Boolean, default=False)
-    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
