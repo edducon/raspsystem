@@ -11,7 +11,6 @@ class Teacher(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
-    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), index=True)
     position_id: Mapped[int | None] = mapped_column(ForeignKey("positions.id"), nullable=True, index=True)
 

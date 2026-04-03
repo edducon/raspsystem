@@ -1,9 +1,8 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class UserBase(BaseModel):
     full_name: str
-    email: EmailStr
     role: str
     is_active: bool = True
     department_id: int | None = None
