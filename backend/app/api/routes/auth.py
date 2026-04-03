@@ -67,4 +67,4 @@ def change_password(
         current_password=payload.current_password,
         new_password=payload.new_password,
     )
-    return MessageResponse(message="Password updated successfully")
+    return MessageResponse(message="Пароль успешно обновлён.")

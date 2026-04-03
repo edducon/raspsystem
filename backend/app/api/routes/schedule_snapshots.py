@@ -3,17 +3,17 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import require_admin
 from app.db.session import get_db
-from app.schemas.schedule_snapshot import ScheduleSnapshotCreate, ScheduleSnapshotRead
+from app.schemas.schedule_snapshot import ScheduleSnapshotCreate, ScheduleSnapshotListRead, ScheduleSnapshotRead
 from app.services.schedule_snapshot_service import ScheduleSnapshotService
 
 router = APIRouter(prefix="/schedule-snapshots", tags=["schedule-snapshots"])
 
 
-@router.get("/", response_model=list[ScheduleSnapshotRead])
+@router.get("/", response_model=list[ScheduleSnapshotListRead])
 def list_snapshots(
     _: object = Depends(require_admin),
     db: Session = Depends(get_db),
-) -> list[ScheduleSnapshotRead]:
+) -> list[ScheduleSnapshotListRead]:
     service = ScheduleSnapshotService(db)
     return service.list_snapshots()
 

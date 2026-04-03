@@ -15,7 +15,7 @@ class AuthService:
         if user is None or not user.is_active or not verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password",
+                detail="Неверный логин или пароль.",
             )
         return user
 
@@ -24,7 +24,7 @@ class AuthService:
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
+                detail="Требуется авторизация.",
             )
 
         user = self.db.get(User, user_id)
@@ -32,7 +32,7 @@ class AuthService:
             request.session.clear()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
+                detail="Требуется авторизация.",
             )
 
         return user
@@ -50,7 +50,7 @@ class AuthService:
         if not verify_password(current_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect",
+                detail="Текущий пароль указан неверно.",
             )
 
         user.password_hash = hash_password(new_password)

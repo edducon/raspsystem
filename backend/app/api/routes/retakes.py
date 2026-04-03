@@ -17,6 +17,8 @@ from app.schemas.retake_admin import (
 from app.schemas.retake import (
     GroupHistoryEntryRead,
     GroupRetakeRead,
+    RetakeFormContextRead,
+    RetakeFormContextRequest,
     MergedDayScheduleRequest,
     MergedDaySlotRead,
     RetakeCreateRequest,
@@ -61,6 +63,15 @@ def get_group_history(
     db: Session = Depends(get_db),
 ) -> list[GroupHistoryEntryRead]:
     return RetakeService(db).list_group_history(group_name=group_name)
+
+
+@router.post("/form-context", response_model=RetakeFormContextRead)
+def get_retake_form_context(
+    payload: RetakeFormContextRequest,
+    current_user: User = Depends(require_scheduler_roles),
+    db: Session = Depends(get_db),
+) -> RetakeFormContextRead:
+    return RetakeService(db).get_form_context(payload=payload, user=current_user)
 
 
 @router.post("/merged-day", response_model=dict[str, MergedDaySlotRead | None])

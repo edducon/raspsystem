@@ -3,11 +3,24 @@ import { ref, watch, computed } from 'vue';
 import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
 import { addToast } from '../composables/useToast';
 import { fetchBackendFromBrowser } from '../lib/backend-api';
-import { cleanSubjectName, normalizeForCompare, fuzzyMatch } from '../lib/subjectNorm';
+import { cleanSubjectName } from '../lib/subjectNorm';
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
 type GroupRetake = { id: string; subjectUuid: string; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
+type RetakeSubjectOption = { uuid: string; name: string };
+type RetakeFormContext = {
+  groupHistory: GroupHistoryEntry[];
+  existingRetakes: GroupRetake[];
+  availableSubjects: RetakeSubjectOption[];
+  subjectBlockedReason: string | null;
+  assignedAttempts: number[];
+  nextAttemptNumber: number;
+  availableMainTeacherUuids: string[];
+  availableCommissionTeacherUuids: string[];
+  availableChairmanUuids: string[];
+  mainTeacherLacksDept: boolean;
+};
 
 const props = defineProps<{
   backendApiUrl: string;
@@ -33,6 +46,18 @@ const attemptNumber = ref(1);
 const groupSearchQuery = ref('');
 const selectedGroupUuid = ref('');
 const showGroupDropdown = ref(false);
+const formContext = ref<RetakeFormContext>({
+  groupHistory: [],
+  existingRetakes: [],
+  availableSubjects: [],
+  subjectBlockedReason: null,
+  assignedAttempts: [],
+  nextAttemptNumber: 1,
+  availableMainTeacherUuids: [],
+  availableCommissionTeacherUuids: [],
+  availableChairmanUuids: [],
+  mainTeacherLacksDept: false,
+});
 
 const filteredGroups = computed(() => {
   if (!groupSearchQuery.value) return props.groups.slice(0, 50);
@@ -46,8 +71,8 @@ const selectGroup = (group: { uuid: string; number: string }) => {
   showGroupDropdown.value = false;
 };
 
-const groupHistory = ref<GroupHistoryEntry[]>([]);
-const existingGroupRetakes = ref<GroupRetake[]>([]);
+const groupHistory = computed(() => formContext.value.groupHistory);
+const existingGroupRetakes = computed(() => formContext.value.existingRetakes);
 
 const sectionsCollapsed = ref({ slots: false, format: false, commission: false });
 
@@ -59,77 +84,22 @@ const formatShortName = (fullName?: string) => {
   return `${parts[0]} ${parts[1][0]}.${parts[2][0]}.`;
 };
 
-const availableSubjects = computed(() => {
-  if (groupHistory.value.length === 0) return [];
-  const historyNames = groupHistory.value.map((item) => item.subjectName);
-  const cleanedHistoryNames = historyNames.map((name) => normalizeForCompare(name));
-
-  let matched = props.subjects.filter((subject) =>
-    cleanedHistoryNames.some((historyName) => historyName === normalizeForCompare(subject.name)),
-  );
-
-  if (matched.length === 0) {
-    matched = props.subjects.filter((subject) =>
-      historyNames.some((historyName) => fuzzyMatch(historyName, subject.name)),
-    );
-  }
-
-  const uniqueSubjects: { uuid: string; name: string }[] = [];
-  const seenNames = new Set<string>();
-
-  for (const subject of matched) {
-    const cleaned = cleanSubjectName(subject.name);
-    if (!seenNames.has(cleaned)) {
-      seenNames.add(cleaned);
-      uniqueSubjects.push({ uuid: subject.uuid, name: cleaned });
-    }
-  }
-
-  return uniqueSubjects.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-});
-
-const loadGroupContext = async (groupUuid: string) => {
-  const group = props.groups.find((item) => item.uuid === groupUuid);
-  if (!group) return;
-
-  try {
-    const [history, retakes] = await Promise.all([
-      fetchBackendFromBrowser<GroupHistoryEntry[]>(
-        props.backendApiUrl,
-        `/retakes/history/group/${encodeURIComponent(group.number)}`,
-      ),
-      fetchBackendFromBrowser<GroupRetake[]>(props.backendApiUrl, `/retakes/group/${groupUuid}`),
-    ]);
-
-    groupHistory.value = history;
-    existingGroupRetakes.value = retakes;
-  } catch (error) {
-    addToast(error instanceof Error ? error.message : '�� ������� ��������� ������ ������', 'error');
-  }
-};
-
-watch(selectedGroupUuid, async (newUuid) => {
-  selectedSubject.value = '';
-  groupHistory.value = [];
-  existingGroupRetakes.value = [];
-  mainTeachers.value = [];
-  commissionTeachers.value = [];
-  chairmanTeacher.value = null;
-  if (!newUuid) return;
-  await loadGroupContext(newUuid);
-});
+const availableSubjects = computed(() =>
+  [...formContext.value.availableSubjects]
+    .map((subject) => ({ ...subject, name: cleanSubjectName(subject.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+);
 
 const currentSubjectRetakes = computed(() => {
   if (!selectedSubject.value) return [];
   return existingGroupRetakes.value.filter((retake) => retake.subjectUuid === selectedSubject.value);
 });
 
-const assignedAttempts = computed(() => currentSubjectRetakes.value.map((retake) => Number(retake.attemptNumber)));
+const assignedAttempts = computed(() => formContext.value.assignedAttempts);
 
 watch(assignedAttempts, (assigned) => {
-  if (!assigned.includes(1)) attemptNumber.value = 1;
-  else if (!assigned.includes(2)) attemptNumber.value = 2;
-  else if (!assigned.includes(3)) attemptNumber.value = 3;
+  if (!assigned.includes(attemptNumber.value)) return;
+  attemptNumber.value = formContext.value.nextAttemptNumber;
 }, { immediate: true });
 
 const formatDate = (dateStr: string) => {
@@ -148,73 +118,16 @@ watch(showMainDropdown, (value) => { if (!value) mainSearchQuery.value = ''; });
 watch(showChairmanDropdown, (value) => { if (!value) chairmanSearchQuery.value = ''; });
 watch(showCommDropdown, (value) => { if (!value) commSearchQuery.value = ''; });
 
-const allTeachersForSelectedSubject = computed(() => {
-  if (!selectedSubject.value) return [];
-  const subject = props.subjects.find((item) => item.uuid === selectedSubject.value);
-  if (!subject) return [];
-  const cleanedSubjectName = cleanSubjectName(subject.name);
-  const historyRecords = groupHistory.value.filter((item) => cleanSubjectName(item.subjectName) === cleanedSubjectName);
-  return historyRecords.flatMap((item) => item.teacherNames);
-});
+const teachersByUuids = (uuids: string[]) => {
+  const allowed = new Set(uuids);
+  return props.teachers.filter((teacher) => allowed.has(teacher.uuid));
+};
 
-const subjectBelongsToAnotherDept = computed(() => {
-  if (props.currentUser.role === 'ADMIN' || !selectedSubject.value) return false;
-  const historyNames = allTeachersForSelectedSubject.value;
-  if (historyNames.length === 0) return false;
-  const teachersInHistory = props.teachers.filter((teacher) => historyNames.includes(teacher.fullName));
-  if (teachersInHistory.length === 0) return false;
-  const userDepts = props.currentUser.departmentIds || [];
-  const sharesDept = teachersInHistory.some((teacher) => {
-    const teacherDepts = teacher.departmentIds || [];
-    return teacherDepts.some((id) => userDepts.includes(id));
-  });
-  return !sharesDept;
-});
-
-const availableMainTeachers = computed(() => {
-  if (!selectedSubject.value || subjectBelongsToAnotherDept.value) return [];
-  let filtered = props.teachers;
-  const historyNames = allTeachersForSelectedSubject.value;
-
-  if (historyNames.length > 0) {
-    filtered = filtered.filter((teacher) => historyNames.includes(teacher.fullName));
-  }
-
-  if (props.currentUser.role !== 'ADMIN') {
-    const userDepts = props.currentUser.departmentIds || [];
-    filtered = filtered.filter((teacher) => {
-      const teacherDepts = teacher.departmentIds || [];
-      return teacherDepts.some((id) => userDepts.includes(id));
-    });
-  }
-
-  return filtered;
-});
-
-const validCommissionPool = computed(() => {
-  if (mainTeachers.value.length === 0) return [];
-  const mainTeacher = props.teachers.find((teacher) => teacher.uuid === mainTeachers.value[0]);
-  const mainDepts = mainTeacher?.departmentIds || [];
-  if (mainDepts.length === 0) return [];
-  return props.teachers.filter((teacher) => {
-    const teacherDepts = teacher.departmentIds || [];
-    return teacherDepts.some((id) => mainDepts.includes(id));
-  });
-});
-
-const mainTeacherLacksDept = computed(() => {
-  if (mainTeachers.value.length === 0) return false;
-  const mainTeacher = props.teachers.find((teacher) => teacher.uuid === mainTeachers.value[0]);
-  return !mainTeacher?.departmentIds || mainTeacher.departmentIds.length === 0;
-});
-
-const availableChairmen = computed(() => {
-  return validCommissionPool.value.filter((teacher) => !mainTeachers.value.includes(teacher.uuid) && !commissionTeachers.value.includes(teacher.uuid));
-});
-
-const availableCommissionTeachers = computed(() => {
-  return validCommissionPool.value.filter((teacher) => !mainTeachers.value.includes(teacher.uuid) && teacher.uuid !== chairmanTeacher.value);
-});
+const subjectBelongsToAnotherDept = computed(() => !!formContext.value.subjectBlockedReason);
+const availableMainTeachers = computed(() => teachersByUuids(formContext.value.availableMainTeacherUuids));
+const availableChairmen = computed(() => teachersByUuids(formContext.value.availableChairmanUuids));
+const availableCommissionTeachers = computed(() => teachersByUuids(formContext.value.availableCommissionTeacherUuids));
+const mainTeacherLacksDept = computed(() => formContext.value.mainTeacherLacksDept);
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
@@ -229,12 +142,6 @@ const displayChairmen = computed(() => {
 const displayCommTeachers = computed(() => {
   const query = commSearchQuery.value.toLowerCase();
   return query ? availableCommissionTeachers.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableCommissionTeachers.value;
-});
-
-watch(selectedSubject, () => {
-  mainTeachers.value = availableMainTeachers.value.map((teacher) => teacher.uuid);
-  commissionTeachers.value = [];
-  chairmanTeacher.value = null;
 });
 
 const removeMainTeacher = (uuid: string) => {
@@ -263,7 +170,117 @@ const TIME_MAPPING: Record<number, string> = {
 const isLoadingSlots = ref(false);
 const daySchedule = ref<MergedDaySchedule | null>(null);
 
-watch([selectedDate, selectedGroupUuid, mainTeachers, commissionTeachers, chairmanTeacher], async () => {
+const currentGroup = computed(() => props.groups.find((item) => item.uuid === selectedGroupUuid.value) ?? null);
+
+const resetFormContext = () => {
+  formContext.value = {
+    groupHistory: [],
+    existingRetakes: [],
+    availableSubjects: [],
+    subjectBlockedReason: null,
+    assignedAttempts: [],
+    nextAttemptNumber: 1,
+    availableMainTeacherUuids: [],
+    availableCommissionTeacherUuids: [],
+    availableChairmanUuids: [],
+    mainTeacherLacksDept: false,
+  };
+};
+
+const normalizeSelectedTeacherState = (context: RetakeFormContext) => {
+  const allowedMain = new Set(context.availableMainTeacherUuids);
+  const nextMain = mainTeachers.value.filter((uuid) => allowedMain.has(uuid));
+  if (nextMain.length !== mainTeachers.value.length) {
+    mainTeachers.value = nextMain;
+    return true;
+  }
+
+  const allowedCommission = new Set(context.availableCommissionTeacherUuids);
+  const nextCommission = commissionTeachers.value.filter((uuid) => allowedCommission.has(uuid));
+  if (nextCommission.length !== commissionTeachers.value.length) {
+    commissionTeachers.value = nextCommission;
+    return true;
+  }
+
+  if (chairmanTeacher.value && !context.availableChairmanUuids.includes(chairmanTeacher.value)) {
+    chairmanTeacher.value = null;
+    return true;
+  }
+
+  return false;
+};
+
+const loadFormContext = async () => {
+  if (!currentGroup.value) {
+    resetFormContext();
+    return;
+  }
+
+  try {
+    const nextContext = await fetchBackendFromBrowser<RetakeFormContext>(
+      props.backendApiUrl,
+      '/retakes/form-context',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          groupUuid: currentGroup.value.uuid,
+          groupNumber: currentGroup.value.number,
+          subjectUuid: selectedSubject.value || undefined,
+          mainTeacherUuids: mainTeachers.value,
+          commissionTeacherUuids: commissionTeachers.value,
+          chairmanUuid: chairmanTeacher.value || undefined,
+        }),
+      },
+    );
+
+    formContext.value = nextContext;
+
+    if (!selectedSubject.value && nextContext.availableSubjects.length > 0) {
+      return;
+    }
+
+    const changedSelection = normalizeSelectedTeacherState(nextContext);
+    if (changedSelection) {
+      return;
+    }
+
+    if (assignedAttempts.value.includes(attemptNumber.value) || attemptNumber.value < 1 || attemptNumber.value > 3) {
+      attemptNumber.value = nextContext.nextAttemptNumber;
+    }
+  } catch (error) {
+    resetFormContext();
+    addToast(error instanceof Error ? error.message : 'Не удалось загрузить данные для формы пересдачи.', 'error');
+  }
+};
+
+watch(selectedGroupUuid, async (newUuid, oldUuid) => {
+  if (newUuid !== oldUuid) {
+    selectedSubject.value = '';
+    mainTeachers.value = [];
+    commissionTeachers.value = [];
+    chairmanTeacher.value = null;
+    selectedSlots.value = [];
+    daySchedule.value = null;
+    resetFormContext();
+  }
+  if (!newUuid) return;
+  await loadFormContext();
+});
+
+watch(
+  [
+    selectedSubject,
+    () => mainTeachers.value.join(','),
+    () => commissionTeachers.value.join(','),
+    chairmanTeacher,
+  ],
+  async () => {
+    if (!selectedGroupUuid.value) return;
+    await loadFormContext();
+  },
+);
+
+watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () => commissionTeachers.value.join(','), chairmanTeacher], async () => {
   selectedSlots.value = [];
   daySchedule.value = null;
 
@@ -289,7 +306,7 @@ watch([selectedDate, selectedGroupUuid, mainTeachers, commissionTeachers, chairm
           },
         );
       } catch (error) {
-        addToast(error instanceof Error ? error.message : '�� ������� ��������� ���������� �� ����', 'error');
+        addToast(error instanceof Error ? error.message : 'Не удалось загрузить занятость на день.', 'error');
       }
     }
 
@@ -306,18 +323,18 @@ const toggleSlot = (slot: number) => {
 };
 
 const submitRetake = async () => {
-  if (subjectBelongsToAnotherDept.value) return addToast('��� ������� � ����������!', 'error');
-  if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('�������� ����� � �������� �������������!', 'error');
-  if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('��� 2-� � 3-� ������� ���������� ��������� ������������ ��������!', 'error');
-  if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('������� ��������� ��� ���������� ���������', 'error');
-  if (retakeFormat.value === 'online' && !onlineLink.value) return addToast('������� ������ �� �����������', 'error');
-  if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('��� ������� ��������� ��� ���������!', 'error');
+  if (subjectBelongsToAnotherDept.value) return addToast(formContext.value.subjectBlockedReason || 'Нет прав назначения.', 'error');
+  if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('Выберите пары и ведущих преподавателей.', 'error');
+  if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('Для второй и третьей попытки нужно выбрать председателя комиссии.', 'error');
+  if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для очного формата.', 'error');
+  if (retakeFormat.value === 'online' && !onlineLink.value) return addToast('Укажите ссылку для онлайн-формата.', 'error');
+  if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
 
   isSubmitting.value = true;
 
   try {
     const group = props.groups.find((item) => item.uuid === selectedGroupUuid.value);
-    if (!group) throw new Error('������ �� �������');
+    if (!group) throw new Error('Группа не найдена.');
 
     await fetchBackendFromBrowser(
       props.backendApiUrl,
@@ -340,30 +357,30 @@ const submitRetake = async () => {
       },
     );
 
-    await loadGroupContext(selectedGroupUuid.value);
+    await loadFormContext();
     selectedSlots.value = [];
     selectedDate.value = '';
-    addToast('��������� ������� ���������!', 'success');
+    addToast('Пересдача успешно назначена.', 'success');
     roomUuid.value = '';
     onlineLink.value = '';
     chairmanTeacher.value = null;
     commissionTeachers.value = [];
   } catch (error) {
-    addToast(error instanceof Error ? error.message : '�� ������� ������� ���������', 'error');
+    addToast(error instanceof Error ? error.message : 'Не удалось создать пересдачу.', 'error');
   } finally {
     isSubmitting.value = false;
   }
 };
 
 const deleteRetake = async (id: string) => {
-  if (!confirm('�� �������, ��� ������ ������� ��� ���������?')) return;
+  if (!confirm('Вы уверены, что хотите удалить эту пересдачу?')) return;
   try {
     await fetchBackendFromBrowser(props.backendApiUrl, `/retakes/${id}`, { method: 'DELETE' });
-    addToast('��������� ��������', 'success');
-    existingGroupRetakes.value = existingGroupRetakes.value.filter((item) => item.id !== id);
+    addToast('Пересдача удалена.', 'success');
+    await loadFormContext();
     selectedDate.value = '';
   } catch (error) {
-    addToast(error instanceof Error ? error.message : '�� ������� ������� ���������', 'error');
+    addToast(error instanceof Error ? error.message : 'Не удалось удалить пересдачу.', 'error');
   }
 };
 </script>
@@ -460,7 +477,14 @@ const deleteRetake = async (id: string) => {
               class="text-xs text-red-500 dark:text-red-400 font-medium mt-2 flex items-start gap-1.5"
           >
             <AlertTriangle class="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Дисциплина другой кафедры. Нет прав назначения.
+            {{ formContext.subjectBlockedReason }}
+          </p>
+          <p
+              v-else-if="selectedGroupUuid && availableSubjects.length === 0"
+              class="text-xs text-amber-600 dark:text-amber-300 font-medium mt-2 flex items-start gap-1.5"
+          >
+            <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            Для группы не найдены дисциплины. Проверьте import прошлого семестра или reference snapshot.
           </p>
         </div>
 

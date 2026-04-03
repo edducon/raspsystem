@@ -20,7 +20,7 @@ class DepartmentService:
         if not department:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Department not found",
+                detail="Кафедра не найдена.",
             )
         return department
 
@@ -29,14 +29,14 @@ class DepartmentService:
         if existing_by_name:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department with this name already exists",
+                detail="Кафедра с таким названием уже существует.",
             )
 
         existing_by_short_name = self.repository.get_by_short_name(data.short_name)
         if existing_by_short_name:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department with this short name already exists",
+                detail="Кафедра с таким сокращением уже существует.",
             )
 
         return self.repository.create(data)
@@ -48,14 +48,14 @@ class DepartmentService:
         if existing_by_name and existing_by_name.id != department_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department with this name already exists",
+                detail="Кафедра с таким названием уже существует.",
             )
 
         existing_by_short_name = self.repository.get_by_short_name(data.short_name)
         if existing_by_short_name and existing_by_short_name.id != department_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department with this short name already exists",
+                detail="Кафедра с таким сокращением уже существует.",
             )
 
         return self.repository.update(department, data)
@@ -67,14 +67,14 @@ class DepartmentService:
         if linked_user is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department is assigned as a primary department for a user",
+                detail="Нельзя удалить кафедру: она указана как основная у пользователя.",
             )
 
         linked_teacher = self.db.scalar(select(Teacher).where(Teacher.department_id == department_id))
         if linked_teacher is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department is assigned to a teacher",
+                detail="Нельзя удалить кафедру: она привязана к преподавателю.",
             )
 
         linked_user_scope = self.db.scalar(
@@ -83,7 +83,7 @@ class DepartmentService:
         if linked_user_scope is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department is used in user access scopes",
+                detail="Нельзя удалить кафедру: она используется в областях доступа пользователей.",
             )
 
         linked_teacher_scope = self.db.scalar(
@@ -92,7 +92,7 @@ class DepartmentService:
         if linked_teacher_scope is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Department is used in the teacher directory",
+                detail="Нельзя удалить кафедру: она используется в справочнике преподавателей.",
             )
 
         self.repository.delete(department)

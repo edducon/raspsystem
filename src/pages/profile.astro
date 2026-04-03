@@ -32,7 +32,7 @@ if (user.departmentIds.length > 0) {
 }
 
 const displayName = teacherProfile?.fullName || user.fullName || user.username;
-const roleLabel = user.role === 'ADMIN' ? '�������������' : user.role === 'EMPLOYEE' ? '���������' : '�������������';
+const roleLabel = user.role === 'ADMIN' ? 'Администратор' : user.role === 'EMPLOYEE' ? 'Сотрудник' : 'Преподаватель';
 const backendApiUrl = getPublicBackendApiUrl();
 ---
 <Layout title="Профиль">
@@ -49,7 +49,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] overflow-hidden">
             <div class="px-6 py-8 sm:px-8 sm:py-9 border-b border-slate-100 dark:border-white/10">
                 <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                    Backend user profile
+                    Профиль пользователя
                 </p>
                 <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
                     {displayName}

@@ -60,15 +60,15 @@ if (hasOwnSchedule) {
 
         teacherRetakesFormatted = myRetakes.map((retake: any) => ({
             ...retake,
-            groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || '����������� ������',
-            subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || '����������� �������'),
+            groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
+            subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
         }));
     } catch (error) {
         console.error('Failed to load teacher retakes', error);
     }
 }
 
-const roleLabel = isAdmin ? '�������������' : isEmployee ? '���������' : '�������������';
+const roleLabel = isAdmin ? 'Администратор' : isEmployee ? 'Сотрудник' : 'Преподаватель';
 const backendApiUrl = getPublicBackendApiUrl();
 ---
 <Layout title="Рабочий стол">
@@ -100,13 +100,13 @@ const backendApiUrl = getPublicBackendApiUrl();
     <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="mb-6">
             <p class="text-[11px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500 font-bold">
-                Backend-driven auth
+                Backend API
             </p>
             <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
                 Рабочий кабинет
             </h1>
             <p class="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-7">
-                Сессия и пользователь теперь определяются через backend FastAPI. Фронтенд использует только UI и backend session cookie.
+                Сессия и пользователь определяются через backend FastAPI. Фронтенд использует только UI и backend session cookie.
             </p>
         </div>
 

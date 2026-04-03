@@ -18,7 +18,7 @@ class TeacherService:
         if not teacher:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Teacher not found",
+                detail="Преподаватель не найден.",
             )
         return teacher
 
@@ -26,13 +26,13 @@ class TeacherService:
         if self.db.get(Department, data.department_id) is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Department not found",
+                detail="Кафедра не найдена.",
             )
 
         if data.position_id is not None and self.db.get(Position, data.position_id) is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Position not found",
+                detail="Должность не найдена.",
             )
 
         teacher = Teacher(
@@ -51,13 +51,13 @@ class TeacherService:
         if self.db.get(Department, data.department_id) is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Department not found",
+                detail="Кафедра не найдена.",
             )
 
         if data.position_id is not None and self.db.get(Position, data.position_id) is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Position not found",
+                detail="Должность не найдена.",
             )
 
         teacher.full_name = data.full_name

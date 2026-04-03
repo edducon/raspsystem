@@ -68,7 +68,7 @@ export async function fetchBackendFromBrowser<T>(
     credentials: "include",
   });
 
-  return parseBackendResponse<T>(response, "Backend request failed");
+  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
 }
 
 export async function fetchBackendFromServer<T>(
@@ -89,5 +89,5 @@ export async function fetchBackendFromServer<T>(
     headers,
   });
 
-  return parseBackendResponse<T>(response, "Backend request failed");
+  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
 }

@@ -22,7 +22,7 @@ class RetakeAdminService:
         if payload.get("status") != "OK" or not isinstance(raw_schedule, dict):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid schedules.json format",
+                detail="Файл schedules.json имеет некорректный формат.",
             )
 
         records_map: dict[tuple[str, str], set[str]] = {}
@@ -72,7 +72,7 @@ class RetakeAdminService:
             "imported_records": len(rows),
             "unique_groups": len({row.group_name for row in rows}),
             "unique_subjects": len({row.subject_name for row in rows}),
-            "message": f"Imported {len(rows)} past semester records",
+            "message": f"Импортировано записей за прошлый семестр: {len(rows)}.",
         }
 
     def reset_retakes(self) -> dict:
@@ -87,7 +87,7 @@ class RetakeAdminService:
             "success": True,
             "deleted_retakes": retake_count,
             "deleted_teacher_links": teacher_link_count,
-            "message": "Retakes and teacher links were removed",
+            "message": "Пересдачи и связи с преподавателями удалены.",
         }
 
     def _resolve_source_path(self, source_path: str | None) -> Path:
@@ -120,7 +120,7 @@ class RetakeAdminService:
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Past semester source file not found. Checked: {', '.join(checked_paths)}",
+            detail=f"Файл данных за прошлый семестр не найден. Проверены пути: {', '.join(checked_paths)}.",
         )
 
     def _load_payload(self, file_path: Path) -> dict:
@@ -129,10 +129,10 @@ class RetakeAdminService:
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Past semester source file not found: {file_path}",
+                detail=f"Файл данных за прошлый семестр не найден: {file_path}.",
             ) from exc
         except json.JSONDecodeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Past semester source file is not valid JSON: {exc}",
+                detail=f"Файл данных за прошлый семестр содержит некорректный JSON: {exc}.",
             ) from exc

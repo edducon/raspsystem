@@ -17,7 +17,7 @@ class PositionService:
         if not position:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Position not found",
+                detail="Должность не найдена.",
             )
         return position
 
@@ -26,7 +26,7 @@ class PositionService:
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Position with this name already exists",
+                detail="Должность с таким названием уже существует.",
             )
         return self.repository.create(data)
 
@@ -37,7 +37,7 @@ class PositionService:
         if existing and existing.id != position_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Position with this name already exists",
+                detail="Должность с таким названием уже существует.",
             )
 
         return self.repository.update(position, data)

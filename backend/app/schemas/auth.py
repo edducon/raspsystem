@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AuthLoginRequest(BaseModel):
@@ -8,7 +8,14 @@ class AuthLoginRequest(BaseModel):
 
 class AuthChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=6)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        if len(value) < 6:
+            raise ValueError("Новый пароль должен содержать минимум 6 символов.")
+        return value
 
 
 class AuthUserRead(BaseModel):

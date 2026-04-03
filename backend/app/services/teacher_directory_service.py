@@ -20,7 +20,7 @@ class TeacherDirectoryService:
         if teacher is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Teacher directory entry not found",
+                detail="Преподаватель из справочника не найден.",
             )
         return teacher
 
@@ -30,7 +30,7 @@ class TeacherDirectoryService:
         if self.db.get(TeacherLocal, teacher_uuid) is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Teacher directory entry with this UUID already exists",
+                detail="Преподаватель с таким UUID уже есть в справочнике.",
             )
 
         teacher = TeacherLocal(
@@ -58,14 +58,14 @@ class TeacherDirectoryService:
         if linked_user is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Teacher directory entry is assigned to a user",
+                detail="Нельзя удалить преподавателя из справочника: он привязан к пользователю.",
             )
 
         linked_retake = self.db.scalar(select(RetakeTeacher).where(RetakeTeacher.teacher_uuid == teacher_uuid))
         if linked_retake is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Teacher directory entry is used in scheduled retakes",
+                detail="Нельзя удалить преподавателя из справочника: он используется в назначенных пересдачах.",
             )
 
         self.db.delete(teacher)
@@ -81,6 +81,6 @@ class TeacherDirectoryService:
         if missing_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Departments not found: {', '.join(str(value) for value in missing_ids)}",
+                detail=f"Не найдены кафедры: {', '.join(str(value) for value in missing_ids)}.",
             )
         return normalized

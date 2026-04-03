@@ -25,8 +25,8 @@ const today = new Date().toISOString().split('T')[0];
 const formattedRetakes = allRetakes.map((retake: any) => ({
     id: retake.id,
     groupUuid: retake.groupUuid,
-    groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || '����������� ������',
-    subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || '����������� �������'),
+    groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
+    subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
     date: retake.date,
     timeSlots: retake.timeSlots,
     room: retake.roomUuid,

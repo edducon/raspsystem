@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import require_admin
+from app.models import User
 from app.db.session import get_db
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.user_service import UserService
@@ -31,7 +32,7 @@ def get_user(
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     data: UserCreate,
-    _: object = Depends(require_admin),
+    _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:
     service = UserService(db)
@@ -42,19 +43,19 @@ def create_user(
 def update_user(
     user_id: int,
     data: UserUpdate,
-    _: object = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:
     service = UserService(db)
-    return service.update_user(user_id, data)
+    return service.update_user(user_id, data, actor=current_admin)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
-    _: object = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     service = UserService(db)
-    service.delete_user(user_id)
+    service.delete_user(user_id, actor=current_admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
