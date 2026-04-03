@@ -1,3 +1,9 @@
 # Исключенные пути проекта
 /node_modules/gsap/src/SplitText.js
-/node_modules/tailwindcss/stubs/tailwind.config.cjs
+/node_modules/tailwindcss/stubs/tailwind.config.cjs\
+.astro
+.claude
+.idea
+node_modules
+package-lock.json
+schedules.json

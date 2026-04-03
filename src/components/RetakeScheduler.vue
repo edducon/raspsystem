@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
-import { actions } from 'astro:actions';
 import { addToast } from '../composables/useToast';
+import { fetchBackendFromBrowser } from '../lib/backend-api';
 import { cleanSubjectName, normalizeForCompare, fuzzyMatch } from '../lib/subjectNorm';
 
+type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
+type GroupRetake = { id: string; subjectUuid: string; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
+type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
+
 const props = defineProps<{
+  backendApiUrl: string;
   groups: { uuid: string; number: string }[];
   subjects: { uuid: string; name: string }[];
   teachers: { uuid: string; fullName: string; departmentIds: number[] | null }[];
@@ -32,7 +37,7 @@ const showGroupDropdown = ref(false);
 const filteredGroups = computed(() => {
   if (!groupSearchQuery.value) return props.groups.slice(0, 50);
   const q = groupSearchQuery.value.toLowerCase();
-  return props.groups.filter(g => g.number.toLowerCase().includes(q)).slice(0, 50);
+  return props.groups.filter((g) => g.number.toLowerCase().includes(q)).slice(0, 50);
 });
 
 const selectGroup = (group: { uuid: string; number: string }) => {
@@ -41,8 +46,8 @@ const selectGroup = (group: { uuid: string; number: string }) => {
   showGroupDropdown.value = false;
 };
 
-const groupHistory = ref<{ subjectName: string; teacherNames: string[] }[]>([]);
-const existingGroupRetakes = ref<{ id: string; subjectUuid: string; attemptNumber: number; date: string; createdBy: string }[]>([]);
+const groupHistory = ref<GroupHistoryEntry[]>([]);
+const existingGroupRetakes = ref<GroupRetake[]>([]);
 
 const sectionsCollapsed = ref({ slots: false, format: false, commission: false });
 
@@ -56,16 +61,16 @@ const formatShortName = (fullName?: string) => {
 
 const availableSubjects = computed(() => {
   if (groupHistory.value.length === 0) return [];
-  const historyNames = groupHistory.value.map(h => h.subjectName);
-  const cleanedHistoryNames = historyNames.map(n => normalizeForCompare(n));
+  const historyNames = groupHistory.value.map((item) => item.subjectName);
+  const cleanedHistoryNames = historyNames.map((name) => normalizeForCompare(name));
 
-  let matched = props.subjects.filter(s =>
-      cleanedHistoryNames.some(h => h === normalizeForCompare(s.name))
+  let matched = props.subjects.filter((subject) =>
+    cleanedHistoryNames.some((historyName) => historyName === normalizeForCompare(subject.name)),
   );
 
   if (matched.length === 0) {
-    matched = props.subjects.filter(s =>
-        historyNames.some(h => fuzzyMatch(h, s.name))
+    matched = props.subjects.filter((subject) =>
+      historyNames.some((historyName) => fuzzyMatch(historyName, subject.name)),
     );
   }
 
@@ -83,6 +88,26 @@ const availableSubjects = computed(() => {
   return uniqueSubjects.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 });
 
+const loadGroupContext = async (groupUuid: string) => {
+  const group = props.groups.find((item) => item.uuid === groupUuid);
+  if (!group) return;
+
+  try {
+    const [history, retakes] = await Promise.all([
+      fetchBackendFromBrowser<GroupHistoryEntry[]>(
+        props.backendApiUrl,
+        `/retakes/history/group/${encodeURIComponent(group.number)}`,
+      ),
+      fetchBackendFromBrowser<GroupRetake[]>(props.backendApiUrl, `/retakes/group/${groupUuid}`),
+    ]);
+
+    groupHistory.value = history;
+    existingGroupRetakes.value = retakes;
+  } catch (error) {
+    addToast(error instanceof Error ? error.message : '�� ������� ��������� ������ ������', 'error');
+  }
+};
+
 watch(selectedGroupUuid, async (newUuid) => {
   selectedSubject.value = '';
   groupHistory.value = [];
@@ -91,25 +116,15 @@ watch(selectedGroupUuid, async (newUuid) => {
   commissionTeachers.value = [];
   chairmanTeacher.value = null;
   if (!newUuid) return;
-
-  const group = props.groups.find(g => g.uuid === newUuid);
-  if (group) {
-    const { data: hData } = await actions.scheduleOptions.getGroupHistory({ groupName: group.number });
-    if (hData) groupHistory.value = hData;
-
-    const { data: rData } = await actions.scheduleOptions.getGroupRetakes({ groupUuid: newUuid });
-    if (rData) existingGroupRetakes.value = rData;
-  }
+  await loadGroupContext(newUuid);
 });
 
 const currentSubjectRetakes = computed(() => {
   if (!selectedSubject.value) return [];
-  return existingGroupRetakes.value.filter(r => r.subjectUuid === selectedSubject.value);
+  return existingGroupRetakes.value.filter((retake) => retake.subjectUuid === selectedSubject.value);
 });
 
-const assignedAttempts = computed(() => {
-  return currentSubjectRetakes.value.map(r => Number(r.attemptNumber));
-});
+const assignedAttempts = computed(() => currentSubjectRetakes.value.map((retake) => Number(retake.attemptNumber)));
 
 watch(assignedAttempts, (assigned) => {
   if (!assigned.includes(1)) attemptNumber.value = 1;
@@ -129,29 +144,29 @@ const mainSearchQuery = ref('');
 const chairmanSearchQuery = ref('');
 const commSearchQuery = ref('');
 
-watch(showMainDropdown, (val) => { if (!val) mainSearchQuery.value = ''; });
-watch(showChairmanDropdown, (val) => { if (!val) chairmanSearchQuery.value = ''; });
-watch(showCommDropdown, (val) => { if (!val) commSearchQuery.value = ''; });
+watch(showMainDropdown, (value) => { if (!value) mainSearchQuery.value = ''; });
+watch(showChairmanDropdown, (value) => { if (!value) chairmanSearchQuery.value = ''; });
+watch(showCommDropdown, (value) => { if (!value) commSearchQuery.value = ''; });
 
 const allTeachersForSelectedSubject = computed(() => {
   if (!selectedSubject.value) return [];
-  const subject = props.subjects.find(s => s.uuid === selectedSubject.value);
+  const subject = props.subjects.find((item) => item.uuid === selectedSubject.value);
   if (!subject) return [];
   const cleanedSubjectName = cleanSubjectName(subject.name);
-  const historyRecords = groupHistory.value.filter(h => cleanSubjectName(h.subjectName) === cleanedSubjectName);
-  return historyRecords.flatMap(h => h.teacherNames);
+  const historyRecords = groupHistory.value.filter((item) => cleanSubjectName(item.subjectName) === cleanedSubjectName);
+  return historyRecords.flatMap((item) => item.teacherNames);
 });
 
 const subjectBelongsToAnotherDept = computed(() => {
   if (props.currentUser.role === 'ADMIN' || !selectedSubject.value) return false;
   const historyNames = allTeachersForSelectedSubject.value;
   if (historyNames.length === 0) return false;
-  const teachersInHistory = props.teachers.filter(t => historyNames.includes(t.fullName));
+  const teachersInHistory = props.teachers.filter((teacher) => historyNames.includes(teacher.fullName));
   if (teachersInHistory.length === 0) return false;
   const userDepts = props.currentUser.departmentIds || [];
-  const sharesDept = teachersInHistory.some(t => {
-    const tDepts = t.departmentIds || [];
-    return tDepts.some(id => userDepts.includes(id));
+  const sharesDept = teachersInHistory.some((teacher) => {
+    const teacherDepts = teacher.departmentIds || [];
+    return teacherDepts.some((id) => userDepts.includes(id));
   });
   return !sharesDept;
 });
@@ -162,14 +177,14 @@ const availableMainTeachers = computed(() => {
   const historyNames = allTeachersForSelectedSubject.value;
 
   if (historyNames.length > 0) {
-    filtered = filtered.filter(t => historyNames.includes(t.fullName));
+    filtered = filtered.filter((teacher) => historyNames.includes(teacher.fullName));
   }
 
   if (props.currentUser.role !== 'ADMIN') {
     const userDepts = props.currentUser.departmentIds || [];
-    filtered = filtered.filter(t => {
-      const tDepts = t.departmentIds || [];
-      return tDepts.some(id => userDepts.includes(id));
+    filtered = filtered.filter((teacher) => {
+      const teacherDepts = teacher.departmentIds || [];
+      return teacherDepts.some((id) => userDepts.includes(id));
     });
   }
 
@@ -178,56 +193,56 @@ const availableMainTeachers = computed(() => {
 
 const validCommissionPool = computed(() => {
   if (mainTeachers.value.length === 0) return [];
-  const mainTeacher = props.teachers.find(t => t.uuid === mainTeachers.value[0]);
+  const mainTeacher = props.teachers.find((teacher) => teacher.uuid === mainTeachers.value[0]);
   const mainDepts = mainTeacher?.departmentIds || [];
   if (mainDepts.length === 0) return [];
-  return props.teachers.filter(t => {
-    const tDepts = t.departmentIds || [];
-    return tDepts.some(id => mainDepts.includes(id));
+  return props.teachers.filter((teacher) => {
+    const teacherDepts = teacher.departmentIds || [];
+    return teacherDepts.some((id) => mainDepts.includes(id));
   });
 });
 
 const mainTeacherLacksDept = computed(() => {
   if (mainTeachers.value.length === 0) return false;
-  const mainTeacher = props.teachers.find(t => t.uuid === mainTeachers.value[0]);
+  const mainTeacher = props.teachers.find((teacher) => teacher.uuid === mainTeachers.value[0]);
   return !mainTeacher?.departmentIds || mainTeacher.departmentIds.length === 0;
 });
 
 const availableChairmen = computed(() => {
-  return validCommissionPool.value.filter(t => !mainTeachers.value.includes(t.uuid) && !commissionTeachers.value.includes(t.uuid));
+  return validCommissionPool.value.filter((teacher) => !mainTeachers.value.includes(teacher.uuid) && !commissionTeachers.value.includes(teacher.uuid));
 });
 
 const availableCommissionTeachers = computed(() => {
-  return validCommissionPool.value.filter(t => !mainTeachers.value.includes(t.uuid) && t.uuid !== chairmanTeacher.value);
+  return validCommissionPool.value.filter((teacher) => !mainTeachers.value.includes(teacher.uuid) && teacher.uuid !== chairmanTeacher.value);
 });
 
 const displayMainTeachers = computed(() => {
-  const q = mainSearchQuery.value.toLowerCase();
-  return q ? availableMainTeachers.value.filter(t => t.fullName.toLowerCase().includes(q)) : availableMainTeachers.value;
+  const query = mainSearchQuery.value.toLowerCase();
+  return query ? availableMainTeachers.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableMainTeachers.value;
 });
 
 const displayChairmen = computed(() => {
-  const q = chairmanSearchQuery.value.toLowerCase();
-  return q ? availableChairmen.value.filter(t => t.fullName.toLowerCase().includes(q)) : availableChairmen.value;
+  const query = chairmanSearchQuery.value.toLowerCase();
+  return query ? availableChairmen.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableChairmen.value;
 });
 
 const displayCommTeachers = computed(() => {
-  const q = commSearchQuery.value.toLowerCase();
-  return q ? availableCommissionTeachers.value.filter(t => t.fullName.toLowerCase().includes(q)) : availableCommissionTeachers.value;
+  const query = commSearchQuery.value.toLowerCase();
+  return query ? availableCommissionTeachers.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableCommissionTeachers.value;
 });
 
 watch(selectedSubject, () => {
-  mainTeachers.value = availableMainTeachers.value.map(t => t.uuid);
+  mainTeachers.value = availableMainTeachers.value.map((teacher) => teacher.uuid);
   commissionTeachers.value = [];
   chairmanTeacher.value = null;
 });
 
 const removeMainTeacher = (uuid: string) => {
-  mainTeachers.value = mainTeachers.value.filter(id => id !== uuid);
+  mainTeachers.value = mainTeachers.value.filter((id) => id !== uuid);
 };
 
 const removeCommTeacher = (uuid: string) => {
-  commissionTeachers.value = commissionTeachers.value.filter(id => id !== uuid);
+  commissionTeachers.value = commissionTeachers.value.filter((id) => id !== uuid);
 };
 
 const selectChairman = (uuid: string) => {
@@ -246,7 +261,7 @@ const TIME_MAPPING: Record<number, string> = {
 };
 
 const isLoadingSlots = ref(false);
-const daySchedule = ref<Record<string, any> | null>(null);
+const daySchedule = ref<MergedDaySchedule | null>(null);
 
 watch([selectedDate, selectedGroupUuid, mainTeachers, commissionTeachers, chairmanTeacher], async () => {
   selectedSlots.value = [];
@@ -254,23 +269,28 @@ watch([selectedDate, selectedGroupUuid, mainTeachers, commissionTeachers, chairm
 
   if (selectedDate.value && selectedGroupUuid.value) {
     isLoadingSlots.value = true;
-    const group = props.groups.find(g => g.uuid === selectedGroupUuid.value);
+    const group = props.groups.find((item) => item.uuid === selectedGroupUuid.value);
     const allSelectedTeacherUuids = [...mainTeachers.value, ...commissionTeachers.value];
     if (chairmanTeacher.value) allSelectedTeacherUuids.push(chairmanTeacher.value);
 
-    const teacherNames = allSelectedTeacherUuids
-        .map(uuid => props.teachers.find(t => t.uuid === uuid)?.fullName)
-        .filter(Boolean) as string[];
-
     if (group) {
-      const { data, error } = await actions.scheduleOptions.getMergedDaySchedule({
-        groupNumber: group.number,
-        groupUuid: group.uuid,
-        teacherUuids: allSelectedTeacherUuids,
-        teacherNames,
-        date: selectedDate.value
-      });
-      if (!error && data) daySchedule.value = data;
+      try {
+        daySchedule.value = await fetchBackendFromBrowser<MergedDaySchedule>(
+          props.backendApiUrl,
+          '/retakes/merged-day',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              groupNumber: group.number,
+              groupUuid: group.uuid,
+              teacherUuids: allSelectedTeacherUuids,
+              date: selectedDate.value,
+            }),
+          },
+        );
+      } catch (error) {
+        addToast(error instanceof Error ? error.message : '�� ������� ��������� ���������� �� ����', 'error');
+      }
     }
 
     isLoadingSlots.value = false;
@@ -286,54 +306,64 @@ const toggleSlot = (slot: number) => {
 };
 
 const submitRetake = async () => {
-  if (subjectBelongsToAnotherDept.value) return addToast('Нет доступа к дисциплине!', 'error');
-  if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('Выберите слоты и ведущего преподавателя!', 'error');
-  if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('Для 2-й и 3-й попытки необходимо назначить председателя комиссии!', 'error');
-  if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для проведения пересдачи', 'error');
-  if (retakeFormat.value === 'online' && !onlineLink.value) return addToast('Укажите ссылку на подключение', 'error');
-  if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена!', 'error');
+  if (subjectBelongsToAnotherDept.value) return addToast('��� ������� � ����������!', 'error');
+  if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('�������� ����� � �������� �������������!', 'error');
+  if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('��� 2-� � 3-� ������� ���������� ��������� ������������ ��������!', 'error');
+  if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('������� ��������� ��� ���������� ���������', 'error');
+  if (retakeFormat.value === 'online' && !onlineLink.value) return addToast('������� ������ �� �����������', 'error');
+  if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('��� ������� ��������� ��� ���������!', 'error');
 
   isSubmitting.value = true;
 
-  const { error } = await actions.scheduleOptions.createRetake({
-    groupUuid: selectedGroupUuid.value,
-    subjectUuid: selectedSubject.value,
-    date: selectedDate.value,
-    timeSlots: selectedSlots.value,
-    roomUuid: retakeFormat.value === 'offline' ? roomUuid.value : undefined,
-    link: retakeFormat.value === 'online' ? onlineLink.value : undefined,
-    attemptNumber: attemptNumber.value,
-    mainTeachersUuids: mainTeachers.value,
-    commissionTeachersUuids: commissionTeachers.value,
-    chairmanUuid: chairmanTeacher.value || undefined,
-  });
+  try {
+    const group = props.groups.find((item) => item.uuid === selectedGroupUuid.value);
+    if (!group) throw new Error('������ �� �������');
 
-  isSubmitting.value = false;
+    await fetchBackendFromBrowser(
+      props.backendApiUrl,
+      '/retakes',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          groupNumber: group.number,
+          groupUuid: selectedGroupUuid.value,
+          subjectUuid: selectedSubject.value,
+          date: selectedDate.value,
+          timeSlots: selectedSlots.value,
+          roomUuid: retakeFormat.value === 'offline' ? roomUuid.value : undefined,
+          link: retakeFormat.value === 'online' ? onlineLink.value : undefined,
+          attemptNumber: attemptNumber.value,
+          mainTeachersUuids: mainTeachers.value,
+          commissionTeachersUuids: commissionTeachers.value,
+          chairmanUuid: chairmanTeacher.value || undefined,
+        }),
+      },
+    );
 
-  if (error) {
-    addToast(error.message, 'error');
-  } else {
-    addToast('Пересдача успешно назначена!', 'success');
-    const { data: rData } = await actions.scheduleOptions.getGroupRetakes({ groupUuid: selectedGroupUuid.value });
-    if (rData) existingGroupRetakes.value = rData;
+    await loadGroupContext(selectedGroupUuid.value);
     selectedSlots.value = [];
     selectedDate.value = '';
+    addToast('��������� ������� ���������!', 'success');
     roomUuid.value = '';
     onlineLink.value = '';
     chairmanTeacher.value = null;
     commissionTeachers.value = [];
+  } catch (error) {
+    addToast(error instanceof Error ? error.message : '�� ������� ������� ���������', 'error');
+  } finally {
+    isSubmitting.value = false;
   }
 };
 
 const deleteRetake = async (id: string) => {
-  if (!confirm('Вы уверены, что хотите удалить эту пересдачу?')) return;
-  const { error } = await actions.scheduleOptions.deleteRetake({ id });
-  if (error) {
-    addToast(error.message, 'error');
-  } else {
-    addToast('Пересдача отменена', 'success');
-    existingGroupRetakes.value = existingGroupRetakes.value.filter(r => r.id !== id);
+  if (!confirm('�� �������, ��� ������ ������� ��� ���������?')) return;
+  try {
+    await fetchBackendFromBrowser(props.backendApiUrl, `/retakes/${id}`, { method: 'DELETE' });
+    addToast('��������� ��������', 'success');
+    existingGroupRetakes.value = existingGroupRetakes.value.filter((item) => item.id !== id);
     selectedDate.value = '';
+  } catch (error) {
+    addToast(error instanceof Error ? error.message : '�� ������� ������� ���������', 'error');
   }
 };
 </script>
@@ -473,7 +503,7 @@ const deleteRetake = async (id: string) => {
               </div>
 
               <button
-                  v-if="props.currentUser.role === 'ADMIN' || props.currentUser.id === r.createdBy"
+                  v-if="r.canDelete"
                   @click="deleteRetake(r.id)"
                   class="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   title="Удалить"
@@ -941,3 +971,5 @@ const deleteRetake = async (id: string) => {
     </div>
   </div>
 </template>
+
+

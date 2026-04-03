@@ -2,35 +2,39 @@
 export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
-import { db } from '../db';
-import { departments, teachersLocal } from '../db/schema';
+import { fetchBackendFromServer } from '../lib/backend-api';
 import { getPublicBackendApiUrl } from '../lib/backend-auth';
-import { eq, inArray } from 'drizzle-orm';
 
 const user = Astro.locals.user;
 if (!user) {
     return Astro.redirect('/login');
 }
 
-const [teacherProfile] = user.teacherUuid
-    ? await db.select({
-        fullName: teachersLocal.fullName,
-    }).from(teachersLocal).where(eq(teachersLocal.uuid, user.teacherUuid))
-    : [];
+let teacherProfile = null;
+if (user.teacherUuid) {
+    try {
+        teacherProfile = await fetchBackendFromServer(`/teacher-directory/${user.teacherUuid}`, {}, Astro.request);
+    } catch (error) {
+        console.error('Failed to load teacher profile', error);
+    }
+}
 
 let departmentNames: string[] = [];
 if (user.departmentIds.length > 0) {
-    const rows = await db.select({ name: departments.name })
-        .from(departments)
-        .where(inArray(departments.id, user.departmentIds));
-    departmentNames = rows.map((row) => row.name);
+    try {
+        const departments = await fetchBackendFromServer('/departments/');
+        departmentNames = departments
+            .filter((department: any) => user.departmentIds.includes(department.id))
+            .map((department: any) => department.name);
+    } catch (error) {
+        console.error('Failed to load departments', error);
+    }
 }
 
 const displayName = teacherProfile?.fullName || user.fullName || user.username;
-const roleLabel = user.role === 'ADMIN' ? 'Администратор' : user.role === 'EMPLOYEE' ? 'Диспетчер' : 'Преподаватель';
+const roleLabel = user.role === 'ADMIN' ? '�������������' : user.role === 'EMPLOYEE' ? '���������' : '�������������';
 const backendApiUrl = getPublicBackendApiUrl();
 ---
-
 <Layout title="Профиль">
     <Fragment slot="nav-actions">
         <a
@@ -162,3 +166,4 @@ const backendApiUrl = getPublicBackendApiUrl();
         });
     </script>
 </Layout>
+

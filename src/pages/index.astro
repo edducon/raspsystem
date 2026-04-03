@@ -3,62 +3,39 @@ export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import StudentBoard from '../components/StudentBoard.vue';
-import { db } from '../db';
-import { retakes, retakeTeachers, teachersLocal } from '../db/schema';
 import { RaspyxAPI } from '../lib/api-client';
-import { eq, inArray } from 'drizzle-orm';
+import { fetchBackendFromServer } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
 
 let apiGroups = [];
 let apiSubjects = [];
 let allRetakes = [];
 try {
-    const [[gRes, sRes], dbRetakes] = await Promise.all([
+    const [[groupsRes, subjectsRes], retakesRes] = await Promise.all([
         Promise.all([RaspyxAPI.getGroups(), RaspyxAPI.getSubjects()]),
-        db.select().from(retakes)
+        fetchBackendFromServer('/retakes/'),
     ]);
-    if (gRes?.result) apiGroups = gRes.result;
-    if (sRes?.result) apiSubjects = sRes.result;
-    allRetakes = dbRetakes;
-} catch (e) {}
-
-const today = new Date().toISOString().split('T')[0];
-const retakeIds = allRetakes.map(r => r.id);
-let teachersMap: Record<number, { name: string; role: string }[]> = {};
-
-if (retakeIds.length > 0) {
-    const relations = await db
-        .select({
-            retakeId: retakeTeachers.retakeId,
-            fullName: teachersLocal.fullName,
-            role: retakeTeachers.role
-        })
-        .from(retakeTeachers)
-        .leftJoin(teachersLocal, eq(retakeTeachers.teacherUuid, teachersLocal.uuid))
-        .where(inArray(retakeTeachers.retakeId, retakeIds));
-
-    relations.forEach(rel => {
-        if (!teachersMap[rel.retakeId]) teachersMap[rel.retakeId] = [];
-        if (rel.fullName && rel.role) {
-            teachersMap[rel.retakeId].push({ name: rel.fullName, role: rel.role });
-        }
-    });
+    if (groupsRes?.result) apiGroups = groupsRes.result;
+    if (subjectsRes?.result) apiSubjects = subjectsRes.result;
+    allRetakes = retakesRes;
+} catch (error) {
+    console.error('Failed to load public retakes', error);
 }
 
-const formattedRetakes = allRetakes.map(r => ({
-    id: r.id,
-    groupUuid: r.groupUuid,
-    groupName: apiGroups.find((g: any) => g.uuid === r.groupUuid)?.number || 'Неизвестная группа',
-    subjectName: cleanSubjectName(apiSubjects.find((s: any) => s.uuid === r.subjectUuid)?.name || 'Неизвестный предмет'),
-    date: r.date,
-    timeSlots: r.timeSlots,
-    room: r.roomUuid,
-    link: r.link,
-    attemptNumber: r.attemptNumber,
-    teachers: teachersMap[r.id] || []
+const today = new Date().toISOString().split('T')[0];
+const formattedRetakes = allRetakes.map((retake: any) => ({
+    id: retake.id,
+    groupUuid: retake.groupUuid,
+    groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || '����������� ������',
+    subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || '����������� �������'),
+    date: retake.date,
+    timeSlots: retake.timeSlots,
+    room: retake.roomUuid,
+    link: retake.link,
+    attemptNumber: retake.attemptNumber,
+    teachers: retake.teachers || [],
 }));
 ---
-
 <Layout title="Расписание пересдач">
     <a
             slot="nav-actions"

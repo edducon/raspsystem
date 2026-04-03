@@ -2,12 +2,10 @@
 import Layout from '../../layouts/Layout.astro';
 import RetakeScheduler from '../../components/RetakeScheduler.vue';
 import TeacherBoard from '../../components/TeacherBoard.vue';
-import { db } from '../../db';
-import { retakeTeachers, retakes, teachersLocal } from '../../db/schema';
 import { RaspyxAPI } from '../../lib/api-client';
-import { cleanSubjectName } from '../../lib/subjectNorm';
+import { fetchBackendFromServer } from '../../lib/backend-api';
 import { getPublicBackendApiUrl } from '../../lib/backend-auth';
-import { eq } from 'drizzle-orm';
+import { cleanSubjectName } from '../../lib/subjectNorm';
 
 export const prerender = false;
 
@@ -26,7 +24,7 @@ let apiGroups = [];
 let apiSubjects = [];
 let localTeachers = [];
 
-if (canSchedule) {
+if (canSchedule || hasOwnSchedule) {
     try {
         const [groupsRes, subjectsRes] = await Promise.all([
             RaspyxAPI.getGroups(),
@@ -37,8 +35,14 @@ if (canSchedule) {
     } catch (error) {
         console.error('Failed to load dictionaries', error);
     }
+}
 
-    localTeachers = await db.select().from(teachersLocal).orderBy(teachersLocal.fullName);
+if (canSchedule) {
+    try {
+        localTeachers = await fetchBackendFromServer('/teacher-directory/', {}, Astro.request);
+    } catch (error) {
+        console.error('Failed to load teacher directory', error);
+    }
 }
 
 let teacherFullName = user.fullName || user.username;
@@ -46,54 +50,36 @@ let teacherBaseSchedule = null;
 let teacherRetakesFormatted = [];
 
 if (hasOwnSchedule) {
-    const [teacherRow] = await db.select().from(teachersLocal).where(eq(teachersLocal.uuid, user.teacherUuid!));
-    if (teacherRow) {
-        teacherFullName = teacherRow.fullName;
-        try {
-            const scheduleRes = await RaspyxAPI.getTeacherSchedule(teacherRow.fullName);
-            teacherBaseSchedule = scheduleRes?.result ?? null;
-        } catch (error) {
-            console.error('Failed to load teacher schedule', error);
-        }
-    }
-
-    const myRetakes = await db.select({
-        id: retakes.id,
-        groupUuid: retakes.groupUuid,
-        subjectUuid: retakes.subjectUuid,
-        date: retakes.date,
-        timeSlots: retakes.timeSlots,
-        room: retakes.roomUuid,
-        link: retakes.link,
-        attemptNumber: retakes.attemptNumber,
-        myRole: retakeTeachers.role
-    })
-        .from(retakes)
-        .innerJoin(retakeTeachers, eq(retakes.id, retakeTeachers.retakeId))
-        .where(eq(retakeTeachers.teacherUuid, user.teacherUuid!));
-
     try {
-        const [groupsRes, subjectsRes] = await Promise.all([
-            RaspyxAPI.getGroups(),
-            RaspyxAPI.getSubjects(),
-        ]);
-        const groups = groupsRes?.result || [];
-        const subjects = subjectsRes?.result || [];
+        const teacherRow = user.teacherUuid
+            ? await fetchBackendFromServer(`/teacher-directory/${user.teacherUuid}`, {}, Astro.request)
+            : null;
 
-        teacherRetakesFormatted = myRetakes.map((retake) => ({
+        if (teacherRow) {
+            teacherFullName = teacherRow.fullName;
+            try {
+                const scheduleRes = await RaspyxAPI.getTeacherSchedule(teacherRow.fullName);
+                teacherBaseSchedule = scheduleRes?.result ?? null;
+            } catch (error) {
+                console.error('Failed to load teacher schedule', error);
+            }
+        }
+
+        const myRetakes = await fetchBackendFromServer('/retakes/mine', {}, Astro.request);
+
+        teacherRetakesFormatted = myRetakes.map((retake: any) => ({
             ...retake,
-            groupName: groups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
-            subjectName: cleanSubjectName(subjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестный предмет'),
+            groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || '����������� ������',
+            subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || '����������� �������'),
         }));
     } catch (error) {
-        console.error('Failed to format teacher retakes', error);
+        console.error('Failed to load teacher retakes', error);
     }
 }
 
-const roleLabel = isAdmin ? 'Администратор' : isEmployee ? 'Диспетчер' : 'Преподаватель';
+const roleLabel = isAdmin ? '�������������' : isEmployee ? '���������' : '�������������';
 const backendApiUrl = getPublicBackendApiUrl();
 ---
-
 <Layout title="Рабочий стол">
     <Fragment slot="nav-center">
         <div class="hidden sm:flex items-center gap-2 min-w-0">
@@ -149,6 +135,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         {(activeTab === 'retakes' && canSchedule) && (
             <RetakeScheduler
                 client:load
+                backendApiUrl={backendApiUrl}
                 groups={apiGroups}
                 subjects={apiSubjects}
                 teachers={localTeachers}
@@ -183,3 +170,4 @@ const backendApiUrl = getPublicBackendApiUrl();
         });
     </script>
 </Layout>
+
