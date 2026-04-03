@@ -1,7 +1,15 @@
-import { lucia } from "./lib/auth";
 import { defineMiddleware } from "astro:middleware";
 
+const authMode = import.meta.env.FRONTEND_AUTH_MODE ?? "disabled";
+
 export const onRequest = defineMiddleware(async (context, next) => {
+    if (authMode !== "legacy") {
+        context.locals.user = null;
+        context.locals.session = null;
+        return next();
+    }
+
+    const { lucia } = await import("./lib/auth");
     const sessionId = context.cookies.get(lucia.sessionCookieName)?.value ?? null;
     if (!sessionId) {
         context.locals.user = null;
@@ -19,7 +27,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
         context.cookies.set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
     }
 
-    // Сохраняем пользователя в locals, чтобы использовать на страницах и в Actions
     context.locals.user = user;
     context.locals.session = session;
 
