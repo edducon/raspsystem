@@ -1,0 +1,10 @@
+node_modules
+dist
+.astro
+.git
+.gitignore
+Dockerfile
+backend/.venv
+backend/__pycache__
+backend/.pytest_cache
+backend/alembic/versions/__pycache__
