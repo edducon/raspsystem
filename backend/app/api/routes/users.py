@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import require_admin
 from app.db.session import get_db
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -41,7 +41,7 @@ def create_user(
 @router.put("/{user_id}", response_model=UserRead)
 def update_user(
     user_id: int,
-    data: UserCreate,
+    data: UserUpdate,
     _: object = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:

@@ -1,12 +1,15 @@
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import Teacher, TeacherLocal, User
 from app.repositories.department_repository import DepartmentRepository
 from app.schemas.department import DepartmentCreate
 
 
 class DepartmentService:
     def __init__(self, db: Session) -> None:
+        self.db = db
         self.repository = DepartmentRepository(db)
 
     def list_departments(self):
@@ -59,4 +62,37 @@ class DepartmentService:
 
     def delete_department(self, department_id: int) -> None:
         department = self.get_department(department_id)
+
+        linked_user = self.db.scalar(select(User).where(User.department_id == department_id))
+        if linked_user is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Department is assigned as a primary department for a user",
+            )
+
+        linked_teacher = self.db.scalar(select(Teacher).where(Teacher.department_id == department_id))
+        if linked_teacher is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Department is assigned to a teacher",
+            )
+
+        linked_user_scope = self.db.scalar(
+            select(User.id).where(User.department_ids.contains([department_id]))
+        )
+        if linked_user_scope is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Department is used in user access scopes",
+            )
+
+        linked_teacher_scope = self.db.scalar(
+            select(TeacherLocal.uuid).where(TeacherLocal.department_ids.contains([department_id]))
+        )
+        if linked_teacher_scope is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Department is used in the teacher directory",
+            )
+
         self.repository.delete(department)

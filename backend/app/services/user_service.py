@@ -3,8 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.models import Department, User
-from app.schemas.user import UserCreate
+from app.models import Department, TeacherLocal, User
+from app.schemas.user import UserCreate, UserUpdate
 
 
 class UserService:
@@ -24,12 +24,9 @@ class UserService:
         return user
 
     def create_user(self, data: UserCreate):
-        if data.department_id is not None and self.db.get(Department, data.department_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Department not found",
-            )
-
+        department_ids = self._normalize_department_ids(data.department_id, data.department_ids)
+        self._validate_departments(data.department_id, department_ids)
+        teacher_uuid = self._validate_teacher_uuid(data.teacher_uuid)
         existing_user = self.db.scalar(select(User).where(User.username == data.username))
         if existing_user is not None:
             raise HTTPException(
@@ -44,23 +41,19 @@ class UserService:
             role=data.role,
             is_active=data.is_active,
             department_id=data.department_id,
-            department_ids=data.department_ids,
-            teacher_uuid=data.teacher_uuid,
+            department_ids=department_ids,
+            teacher_uuid=teacher_uuid,
         )
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
         return user
 
-    def update_user(self, user_id: int, data: UserCreate):
+    def update_user(self, user_id: int, data: UserUpdate):
         user = self.get_user(user_id)
-
-        if data.department_id is not None and self.db.get(Department, data.department_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Department not found",
-            )
-
+        department_ids = self._normalize_department_ids(data.department_id, data.department_ids)
+        self._validate_departments(data.department_id, department_ids)
+        teacher_uuid = self._validate_teacher_uuid(data.teacher_uuid)
         existing_user = self.db.scalar(
             select(User).where(
                 User.username == data.username,
@@ -78,9 +71,10 @@ class UserService:
         user.role = data.role
         user.is_active = data.is_active
         user.department_id = data.department_id
-        user.department_ids = data.department_ids
-        user.teacher_uuid = data.teacher_uuid
-        user.password_hash = hash_password(data.password)
+        user.department_ids = department_ids
+        user.teacher_uuid = teacher_uuid
+        if data.password:
+            user.password_hash = hash_password(data.password)
         self.db.commit()
         self.db.refresh(user)
         return user
@@ -89,3 +83,34 @@ class UserService:
         user = self.get_user(user_id)
         self.db.delete(user)
         self.db.commit()
+
+    def _normalize_department_ids(self, department_id: int | None, department_ids: list[int]) -> list[int]:
+        normalized = list(dict.fromkeys(department_ids))
+        if department_id is not None and department_id not in normalized:
+            normalized.append(department_id)
+        return normalized
+
+    def _validate_departments(self, department_id: int | None, department_ids: list[int]) -> None:
+        requested_ids = list(dict.fromkeys(([department_id] if department_id is not None else []) + department_ids))
+        if not requested_ids:
+            return
+
+        existing_ids = set(self.db.scalars(select(Department.id).where(Department.id.in_(requested_ids))).all())
+        missing_ids = [value for value in requested_ids if value not in existing_ids]
+        if missing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Departments not found: {', '.join(str(value) for value in missing_ids)}",
+            )
+
+    def _validate_teacher_uuid(self, teacher_uuid: str | None) -> str | None:
+        normalized = teacher_uuid.strip() if teacher_uuid else None
+        if not normalized:
+            return None
+
+        if self.db.get(TeacherLocal, normalized) is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Teacher directory entry not found",
+            )
+        return normalized

@@ -1,7 +1,22 @@
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class TeacherDirectoryRead(BaseModel):
+class TeacherDirectoryBase(BaseModel):
+    full_name: str
+    department_ids: list[int] = Field(default_factory=list)
+
+
+class TeacherDirectoryCreate(TeacherDirectoryBase):
+    uuid: UUID | None = None
+
+
+class TeacherDirectoryUpdate(TeacherDirectoryBase):
+    pass
+
+
+class TeacherDirectoryRead(TeacherDirectoryBase):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     uuid: str

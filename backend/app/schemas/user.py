@@ -1,10 +1,14 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+UserRole = Literal["ADMIN", "EMPLOYEE", "TEACHER"]
 
 
 class UserBase(BaseModel):
     username: str
     full_name: str
-    role: str
+    role: UserRole
     is_active: bool = True
     department_id: int | None = None
     department_ids: list[int] = Field(default_factory=list)
@@ -13,6 +17,10 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+
+
+class UserUpdate(UserBase):
+    password: str | None = None
 
 
 class UserRead(UserBase):

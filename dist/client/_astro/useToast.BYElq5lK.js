@@ -1,0 +1,1 @@
+import{f as u}from"./runtime-core.esm-bundler.CZxAPIZC.js";const s=u([]),i=(a,e="success")=>{const t=Date.now();s.value.push({id:t,message:a,type:e}),setTimeout(()=>{s.value=s.value.filter(o=>o.id!==t)},4e3)};export{i as a,s as t};
