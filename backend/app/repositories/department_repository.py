@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.department import Department
+from app.models import Department
 from app.schemas.department import DepartmentCreate
 
 

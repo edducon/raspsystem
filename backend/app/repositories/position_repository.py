@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.position import Position
+from app.models import Position
 from app.schemas.position import PositionCreate
 
 

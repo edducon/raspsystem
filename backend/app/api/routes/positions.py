@@ -28,9 +28,9 @@ def create_position(data: PositionCreate, db: Session = Depends(get_db)) -> Posi
 
 @router.put("/{position_id}", response_model=PositionRead)
 def update_position(
-        position_id: int,
-        data: PositionCreate,
-        db: Session = Depends(get_db),
+    position_id: int,
+    data: PositionCreate,
+    db: Session = Depends(get_db),
 ) -> PositionRead:
     service = PositionService(db)
     return service.update_position(position_id, data)

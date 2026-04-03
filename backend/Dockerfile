@@ -11,4 +11,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY backend /app
 
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 8000

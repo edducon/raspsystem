@@ -28,9 +28,9 @@ def create_department(data: DepartmentCreate, db: Session = Depends(get_db)) -> 
 
 @router.put("/{department_id}", response_model=DepartmentRead)
 def update_department(
-        department_id: int,
-        data: DepartmentCreate,
-        db: Session = Depends(get_db),
+    department_id: int,
+    data: DepartmentCreate,
+    db: Session = Depends(get_db),
 ) -> DepartmentRead:
     service = DepartmentService(db)
     return service.update_department(department_id, data)
