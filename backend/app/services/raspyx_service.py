@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import socket
 from urllib import error, parse, request
 
 from app.core.config import settings
@@ -34,6 +35,11 @@ class RaspyxService:
 
             detail = exc.read().decode("utf-8", errors="ignore")
             raise RuntimeError(f"Raspyx request failed with {exc.code}: {detail}") from exc
+        except (error.URLError, TimeoutError, socket.timeout) as exc:
+            # Если внешний API упал или долго отвечает — не крашим систему,
+            # а возвращаем пустой результат. RetakeService переключится на Snapshot.
+            print(f"[RaspyxService] API Connection Error / Timeout: {exc}")
+            return {"success": False, "result": [], "response": []}
 
     def _cached_get(self, endpoint: str) -> object:
         cached = self.__class__._response_cache.get(endpoint)
@@ -49,14 +55,18 @@ class RaspyxService:
         if self.__class__._cached_access_token is not None:
             return self.__class__._cached_access_token
 
-        payload = self._load_json(
-            settings.raspyx_auth_url,
-            method="POST",
-            payload={
-                "username": settings.raspyx_username,
-                "password": settings.raspyx_password,
-            },
-        )
+        try:
+            payload = self._load_json(
+                settings.raspyx_auth_url,
+                method="POST",
+                payload={
+                    "username": settings.raspyx_username,
+                    "password": settings.raspyx_password,
+                },
+            )
+        except Exception:
+            # Если авторизация упала по таймауту
+            return "offline_mock_token"
 
         token = None
         if isinstance(payload, dict):
@@ -66,7 +76,8 @@ class RaspyxService:
                 token = payload["response"].get("token")
 
         if not token:
-            raise RuntimeError("Raspyx auth did not return an access token")
+            print("Raspyx auth did not return an access token, using offline mode.")
+            return "offline_mock_token"
 
         self.__class__._cached_access_token = str(token)
         return self.__class__._cached_access_token

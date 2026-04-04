@@ -5,7 +5,6 @@ import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
 type UserRole = 'ADMIN' | 'EMPLOYEE' | 'TEACHER';
 type StatusKind = 'success' | 'error';
 type SnapshotSummary = { id: number; name: string; semesterLabel: string; status: string; sourceType: string; description: string | null; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number };
-type SnapshotDetail = SnapshotSummary & { groups: unknown[]; subjects: unknown[]; teachers: unknown[]; scheduleItems: unknown[] };
 type UserItem = { id: number; username: string; fullName: string; role: UserRole; isActive: boolean; departmentId: number | null; departmentIds: number[]; teacherUuid: string | null };
 type DepartmentItem = { id: number; name: string; short_name: string };
 type TeacherDirectoryItem = { uuid: string; fullName: string; departmentIds: number[] };
@@ -21,7 +20,6 @@ const props = defineProps<{
   initialPositions: PositionItem[];
   initialTeachers: TeacherItem[];
   initialScheduleSnapshots: SnapshotSummary[];
-  initialLoadError?: string;
 }>();
 
 const users = ref([...props.initialUsers]);
@@ -30,63 +28,45 @@ const teacherDirectory = ref([...props.initialTeacherDirectory]);
 const positions = ref([...props.initialPositions]);
 const teachers = ref([...props.initialTeachers]);
 const scheduleSnapshots = ref([...props.initialScheduleSnapshots]);
-const loadError = ref(props.initialLoadError ?? '');
 const status = ref<{ kind: StatusKind; message: string } | null>(null);
-const busy = reactive({ reload: false, user: false, department: false, teacherDirectory: false, position: false, teacher: false, snapshot: false, snapshotLoad: false, maintenance: false });
-const editing = reactive({ userId: null as number | null, departmentId: null as number | null, teacherDirectoryUuid: null as string | null, positionId: null as number | null, teacherId: null as number | null, snapshotId: null as number | null });
-const userForm = reactive({ username: '', full_name: '', role: 'EMPLOYEE' as UserRole, is_active: true, department_id: '', department_ids: [] as number[], teacher_uuid: '', password: '' });
+
+const activeTab = ref('teachers');
+const tabs = [
+  { id: 'teachers', label: 'Преподаватели' },
+  { id: 'users', label: 'Пользователи' },
+  { id: 'departments', label: 'Кафедры и должности' },
+  { id: 'snapshots', label: 'Снимки расписания' }
+];
+
+const busy = reactive({ reload: false, maintenance: false, flow: false, department: false, position: false, user: false });
+
+const showTeacherModal = ref(false);
+const teacherFlowForm = reactive({ full_name: '', department_id: '', position_id: '', create_account: false, username: '', password: '' });
 const departmentForm = reactive({ name: '', short_name: '' });
-const teacherDirectoryForm = reactive({ full_name: '', department_ids: [] as number[] });
 const positionForm = reactive({ name: '', sort_order: 0, is_active: true });
-const teacherForm = reactive({ full_name: '', department_id: '', position_id: '' });
-const snapshotForm = reactive({ name: '', semester_label: '', status: 'draft', source_type: 'manual', description: '', is_reference_for_retakes: false, captured_at: '', groups_json: '[]', subjects_json: '[]', teachers_json: '[]', schedule_items_json: '[]' });
+const userForm = reactive({ username: '', full_name: '', role: 'EMPLOYEE' as UserRole, is_active: true, department_id: '', department_ids: [] as number[], teacher_uuid: '', password: '' });
 
 const errorText = (error: unknown, fallback: string) => error instanceof BackendApiError ? error.detail : error instanceof Error ? error.message : fallback;
-const setStatus = (kind: StatusKind, message: string) => { status.value = { kind, message }; };
-const clearStatus = () => { status.value = null; };
-const uniq = (values: number[]) => [...new Set(values)];
-const checkboxChecked = (event: Event) => event.target instanceof HTMLInputElement ? event.target.checked : false;
-const toggleSelection = (target: number[], value: number, checked: boolean) => checked ? uniq([...target, value]) : target.filter((item) => item !== value);
-const normalizeDeptIds = (primaryId: string, ids: number[]) => primaryId ? uniq([...ids, Number(primaryId)]) : uniq(ids);
-const formatDateTime = (value: string | null) => value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Не указано';
-const toLocalDateTime = (value: string | null) => value ? new Date(value).toISOString().slice(0, 16) : '';
-const fromLocalDateTime = (value: string) => value ? new Date(value).toISOString() : null;
-const parseJsonArray = (value: string, label: string) => {
-  const parsed = JSON.parse(value.trim() || '[]');
-  if (!Array.isArray(parsed)) throw new Error(`Поле «${label}» должно содержать JSON-массив.`);
-  return parsed;
-};
-const scopeLabel = (ids: number[]) => ids.length ? ids.map((id) => {
-  const department = departments.value.find((item) => item.id === id);
-  return department ? `${department.short_name} (${department.name})` : `#${id}`;
-}).join(', ') : 'Не выбрано';
-const departmentLabel = (id: number | null) => {
-  if (id === null) return 'Не выбрана';
-  const department = departments.value.find((item) => item.id === id);
-  return department ? `${department.short_name} (${department.name})` : `#${id}`;
-};
-const positionLabel = (id: number | null) => {
-  if (id === null) return 'Не указана';
-  const position = positions.value.find((item) => item.id === id);
-  return position ? position.name : `#${id}`;
-};
-const teacherDirectoryLabel = (uuid: string | null) => {
-  if (!uuid) return 'Не привязан';
-  const teacher = teacherDirectory.value.find((item) => item.uuid === uuid);
-  return teacher ? `${teacher.fullName} (${teacher.uuid})` : uuid;
+const setStatus = (kind: StatusKind, message: string) => { status.value = { kind, message }; setTimeout(() => status.value = null, 5000); };
+
+const getDepartmentName = (id: number | null | string) => {
+  if (!id) return '—';
+  const dept = departments.value.find(d => String(d.id) === String(id));
+  return dept ? dept.short_name : `ID:${id}`;
 };
 
-const resetUserForm = () => { Object.assign(userForm, { username: '', full_name: '', role: 'EMPLOYEE', is_active: true, department_id: '', department_ids: [], teacher_uuid: '', password: '' }); editing.userId = null; };
-const resetDepartmentForm = () => { Object.assign(departmentForm, { name: '', short_name: '' }); editing.departmentId = null; };
-const resetTeacherDirectoryForm = () => { Object.assign(teacherDirectoryForm, { full_name: '', department_ids: [] }); editing.teacherDirectoryUuid = null; };
-const resetPositionForm = () => { Object.assign(positionForm, { name: '', sort_order: 0, is_active: true }); editing.positionId = null; };
-const resetTeacherForm = () => { Object.assign(teacherForm, { full_name: '', department_id: '', position_id: '' }); editing.teacherId = null; };
-const resetSnapshotForm = () => { Object.assign(snapshotForm, { name: '', semester_label: '', status: 'draft', source_type: 'manual', description: '', is_reference_for_retakes: false, captured_at: '', groups_json: '[]', subjects_json: '[]', teachers_json: '[]', schedule_items_json: '[]' }); editing.snapshotId = null; };
+const getPositionName = (id: number | null | string) => {
+  if (!id) return '—';
+  const pos = positions.value.find(p => String(p.id) === String(id));
+  return pos ? pos.name : `ID:${id}`;
+};
+
+const getAccountForTeacher = (fullName: string) => users.value.find(u => u.fullName === fullName);
 
 async function reloadAll() {
   busy.reload = true;
   try {
-    const [nextUsers, nextDepartments, nextTeacherDirectory, nextPositions, nextTeachers, nextSnapshots] = await Promise.all([
+    const [u, d, td, p, t, s] = await Promise.all([
       fetchBackendFromBrowser<UserItem[]>(props.backendApiUrl, '/users/'),
       fetchBackendFromBrowser<DepartmentItem[]>(props.backendApiUrl, '/departments/'),
       fetchBackendFromBrowser<TeacherDirectoryItem[]>(props.backendApiUrl, '/teacher-directory/'),
@@ -94,144 +74,244 @@ async function reloadAll() {
       fetchBackendFromBrowser<TeacherItem[]>(props.backendApiUrl, '/teachers/'),
       fetchBackendFromBrowser<SnapshotSummary[]>(props.backendApiUrl, '/schedule-snapshots/'),
     ]);
-    users.value = nextUsers; departments.value = nextDepartments; teacherDirectory.value = nextTeacherDirectory; positions.value = nextPositions; teachers.value = nextTeachers; scheduleSnapshots.value = nextSnapshots; loadError.value = '';
-  } catch (error) {
-    const message = errorText(error, 'Не удалось обновить данные админ-панели.');
-    loadError.value = message; setStatus('error', message);
-  } finally { busy.reload = false; }
+    users.value = u; departments.value = d; teacherDirectory.value = td; positions.value = p; teachers.value = t; scheduleSnapshots.value = s;
+  } catch (error) { setStatus('error', errorText(error, 'Ошибка обновления данных.')); }
+  finally { busy.reload = false; }
 }
-async function submitEntity(kind: 'user' | 'department' | 'teacherDirectory' | 'position' | 'teacher' | 'snapshot') {
-  clearStatus();
+
+async function submitDepartment() {
+  busy.department = true;
   try {
-    if (kind === 'user') {
-      busy.user = true;
-      if (editing.userId === null && !userForm.password.trim()) throw new Error('Для нового пользователя нужно указать пароль.');
-      const isCreate = editing.userId === null;
-      const payload: Record<string, unknown> = { username: userForm.username.trim(), full_name: userForm.full_name.trim(), role: userForm.role, is_active: userForm.is_active, department_id: userForm.department_id ? Number(userForm.department_id) : null, department_ids: normalizeDeptIds(userForm.department_id, userForm.department_ids), teacher_uuid: userForm.teacher_uuid || null };
-      if (userForm.password.trim()) payload.password = userForm.password.trim();
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/users/' : `/users/${editing.userId}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify(payload) });
-      resetUserForm(); setStatus('success', isCreate ? 'Пользователь создан.' : 'Пользователь обновлён.');
-    }
-    if (kind === 'department') {
-      busy.department = true;
-      const isCreate = editing.departmentId === null;
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/departments/' : `/departments/${editing.departmentId}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify({ name: departmentForm.name.trim(), short_name: departmentForm.short_name.trim() }) });
-      resetDepartmentForm(); setStatus('success', isCreate ? 'Кафедра создана.' : 'Кафедра обновлена.');
-    }
-    if (kind === 'teacherDirectory') {
-      busy.teacherDirectory = true;
-      const isCreate = editing.teacherDirectoryUuid === null;
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/teacher-directory/' : `/teacher-directory/${editing.teacherDirectoryUuid}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify({ full_name: teacherDirectoryForm.full_name.trim(), department_ids: uniq(teacherDirectoryForm.department_ids) }) });
-      resetTeacherDirectoryForm(); setStatus('success', isCreate ? 'Преподаватель справочника создан.' : 'Преподаватель справочника обновлён.');
-    }
-    if (kind === 'position') {
-      busy.position = true;
-      const isCreate = editing.positionId === null;
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/positions/' : `/positions/${editing.positionId}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify({ name: positionForm.name.trim(), sort_order: Number(positionForm.sort_order), is_active: positionForm.is_active }) });
-      resetPositionForm(); setStatus('success', isCreate ? 'Должность создана.' : 'Должность обновлена.');
-    }
-    if (kind === 'teacher') {
-      busy.teacher = true;
-      if (!teacherForm.department_id) throw new Error('Для преподавателя нужно выбрать кафедру.');
-      const isCreate = editing.teacherId === null;
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/teachers/' : `/teachers/${editing.teacherId}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify({ full_name: teacherForm.full_name.trim(), department_id: Number(teacherForm.department_id), position_id: teacherForm.position_id ? Number(teacherForm.position_id) : null }) });
-      resetTeacherForm(); setStatus('success', isCreate ? 'Преподаватель создан.' : 'Преподаватель обновлён.');
-    }
-    if (kind === 'snapshot') {
-      busy.snapshot = true;
-      const isCreate = editing.snapshotId === null;
-      const payload = { name: snapshotForm.name.trim(), semesterLabel: snapshotForm.semester_label.trim(), status: snapshotForm.status, sourceType: snapshotForm.source_type.trim(), description: snapshotForm.description.trim() || null, isReferenceForRetakes: snapshotForm.is_reference_for_retakes, capturedAt: fromLocalDateTime(snapshotForm.captured_at), groups: parseJsonArray(snapshotForm.groups_json, 'Группы'), subjects: parseJsonArray(snapshotForm.subjects_json, 'Дисциплины'), teachers: parseJsonArray(snapshotForm.teachers_json, 'Преподаватели'), scheduleItems: parseJsonArray(snapshotForm.schedule_items_json, 'Элементы расписания') };
-      await fetchBackendFromBrowser(props.backendApiUrl, isCreate ? '/schedule-snapshots/' : `/schedule-snapshots/${editing.snapshotId}`, { method: isCreate ? 'POST' : 'PUT', body: JSON.stringify(payload) });
-      resetSnapshotForm(); setStatus('success', isCreate ? 'Snapshot создан.' : 'Snapshot обновлён.');
-    }
+    // Используем camelCase для Pydantic v2
+    await fetchBackendFromBrowser(props.backendApiUrl, '/departments/', {
+      method: 'POST',
+      body: JSON.stringify({ name: departmentForm.name.trim(), shortName: departmentForm.short_name.trim() })
+    });
+    setStatus('success', 'Кафедра создана.');
+    departmentForm.name = ''; departmentForm.short_name = '';
     await reloadAll();
-  } catch (error) {
-    setStatus('error', errorText(error, 'Не удалось сохранить данные.'));
-  } finally {
-    busy.user = false; busy.department = false; busy.teacherDirectory = false; busy.position = false; busy.teacher = false; busy.snapshot = false;
-  }
+  } catch (error) { setStatus('error', errorText(error, 'Не удалось создать кафедру.')); }
+  finally { busy.department = false; }
 }
 
-const editUser = (item: UserItem) => { clearStatus(); editing.userId = item.id; Object.assign(userForm, { username: item.username, full_name: item.fullName, role: item.role, is_active: item.isActive, department_id: item.departmentId === null ? '' : String(item.departmentId), department_ids: [...item.departmentIds], teacher_uuid: item.teacherUuid ?? '', password: '' }); };
-const editDepartment = (item: DepartmentItem) => { clearStatus(); editing.departmentId = item.id; Object.assign(departmentForm, { name: item.name, short_name: item.short_name }); };
-const editTeacherDirectory = (item: TeacherDirectoryItem) => { clearStatus(); editing.teacherDirectoryUuid = item.uuid; Object.assign(teacherDirectoryForm, { full_name: item.fullName, department_ids: [...item.departmentIds] }); };
-const editPosition = (item: PositionItem) => { clearStatus(); editing.positionId = item.id; Object.assign(positionForm, { name: item.name, sort_order: item.sort_order, is_active: item.is_active }); };
-const editTeacher = (item: TeacherItem) => { clearStatus(); editing.teacherId = item.id; Object.assign(teacherForm, { full_name: item.full_name, department_id: String(item.department_id), position_id: item.position_id === null ? '' : String(item.position_id) }); };
-async function editSnapshot(item: SnapshotSummary) {
-  clearStatus(); busy.snapshotLoad = true;
+async function submitPosition() {
+  busy.position = true;
   try {
-    const detail = await fetchBackendFromBrowser<SnapshotDetail>(props.backendApiUrl, `/schedule-snapshots/${item.id}`);
-    editing.snapshotId = item.id;
-    Object.assign(snapshotForm, { name: detail.name, semester_label: detail.semesterLabel, status: detail.status, source_type: detail.sourceType, description: detail.description ?? '', is_reference_for_retakes: detail.isReferenceForRetakes, captured_at: toLocalDateTime(detail.capturedAt), groups_json: JSON.stringify(detail.groups, null, 2), subjects_json: JSON.stringify(detail.subjects, null, 2), teachers_json: JSON.stringify(detail.teachers, null, 2), schedule_items_json: JSON.stringify(detail.scheduleItems, null, 2) });
-  } catch (error) {
-    setStatus('error', errorText(error, 'Не удалось загрузить snapshot.'));
-  } finally { busy.snapshotLoad = false; }
+    // Используем camelCase для Pydantic v2
+    await fetchBackendFromBrowser(props.backendApiUrl, '/positions/', {
+      method: 'POST',
+      body: JSON.stringify({ name: positionForm.name.trim(), sortOrder: Number(positionForm.sort_order), isActive: positionForm.is_active })
+    });
+    setStatus('success', 'Должность создана.');
+    positionForm.name = ''; positionForm.sort_order = 0;
+    await reloadAll();
+  } catch (error) { setStatus('error', errorText(error, 'Не удалось создать должность.')); }
+  finally { busy.position = false; }
 }
 
-async function deleteEntity(path: string, successMessage: string) {
-  clearStatus();
-  try { await fetchBackendFromBrowser(props.backendApiUrl, path, { method: 'DELETE' }); setStatus('success', successMessage); await reloadAll(); }
-  catch (error) { setStatus('error', errorText(error, 'Не удалось удалить запись.')); }
+async function submitTeacherFlow() {
+  busy.flow = true;
+  try {
+    const directoryRes = await fetchBackendFromBrowser<{uuid: string}>(props.backendApiUrl, '/teacher-directory/', {
+      method: 'POST', body: JSON.stringify({ fullName: teacherFlowForm.full_name, departmentIds: [Number(teacherFlowForm.department_id)] })
+    });
+
+    await fetchBackendFromBrowser(props.backendApiUrl, '/teachers/', {
+      method: 'POST', body: JSON.stringify({ fullName: teacherFlowForm.full_name, departmentId: Number(teacherFlowForm.department_id), positionId: teacherFlowForm.position_id ? Number(teacherFlowForm.position_id) : null })
+    });
+
+    if (teacherFlowForm.create_account) {
+      await fetchBackendFromBrowser(props.backendApiUrl, '/users/', {
+        method: 'POST', body: JSON.stringify({ username: teacherFlowForm.username, password: teacherFlowForm.password, fullName: teacherFlowForm.full_name, role: 'TEACHER', isActive: true, departmentId: Number(teacherFlowForm.department_id), departmentIds: [Number(teacherFlowForm.department_id)], teacherUuid: directoryRes.uuid })
+      });
+    }
+
+    setStatus('success', 'Преподаватель успешно добавлен!');
+    showTeacherModal.value = false;
+    Object.assign(teacherFlowForm, { full_name: '', department_id: '', position_id: '', create_account: false, username: '', password: '' });
+    await reloadAll();
+  } catch (error) { setStatus('error', errorText(error, 'Ошибка при создании преподавателя.')); }
+  finally { busy.flow = false; }
 }
 
-async function importPastSemester() {
-  busy.maintenance = true;
-  try {
-    const payload = await fetchBackendFromBrowser<{ message: string; sourcePath?: string }>(props.backendApiUrl, '/retakes/admin/past-semester/import', { method: 'POST', body: JSON.stringify({}) });
-    setStatus('success', `${payload.message} Источник: ${payload.sourcePath ?? 'не указан'}.`);
-  } catch (error) { setStatus('error', errorText(error, 'Не удалось импортировать данные за прошлый семестр.')); }
-  finally { busy.maintenance = false; }
+async function deleteEntity(path: string, msg: string) {
+  if (!window.confirm('Вы уверены?')) return;
+  try { await fetchBackendFromBrowser(props.backendApiUrl, path, { method: 'DELETE' }); setStatus('success', msg); await reloadAll(); }
+  catch(error) { setStatus('error', 'Ошибка при удалении.'); }
 }
-async function resetRetakes() {
-  if (!window.confirm('Удалить все пересдачи и связи с преподавателями?')) return;
-  busy.maintenance = true;
-  try {
-    const payload = await fetchBackendFromBrowser<{ message: string; deletedRetakes: number; deletedTeacherLinks: number }>(props.backendApiUrl, '/retakes/admin/reset', { method: 'POST' });
-    setStatus('success', `${payload.message} Пересдач: ${payload.deletedRetakes}, связей: ${payload.deletedTeacherLinks}.`);
-  } catch (error) { setStatus('error', errorText(error, 'Не удалось сбросить пересдачи.')); }
-  finally { busy.maintenance = false; }
+
+function formatDateTime(value: string | null) {
+  return value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Не указано';
 }
 </script>
+
 <template>
-  <section class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6">
-    <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
-      <div class="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-end"><div><p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-bold">Администрирование</p><h1 class="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">Панель администратора</h1><p class="mt-3 text-sm text-slate-500 dark:text-slate-400 max-w-3xl leading-7">Все CRUD-операции выполняются через backend API. Фронтенд остаётся thin client без локальной бизнес-логики.</p></div><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold disabled:opacity-60" :disabled="busy.reload" @click="reloadAll">{{ busy.reload ? 'Обновляем...' : 'Обновить данные' }}</button></div>
-      <div v-if="status" class="rounded-2xl px-4 py-3 text-sm border" :class="status.kind === 'error' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'">{{ status.message }}</div>
-      <div v-if="loadError" class="rounded-2xl px-4 py-3 text-sm border border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{{ loadError }}</div>
-      <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 text-sm"><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Пользователи: <b>{{ users.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Кафедры: <b>{{ departments.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Справочник: <b>{{ teacherDirectory.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Должности: <b>{{ positions.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Преподаватели: <b>{{ teachers.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Snapshots: <b>{{ scheduleSnapshots.length }}</b></div><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4">Элементы: <b>{{ scheduleSnapshots.reduce((acc, item) => acc + item.scheduleItemCount, 0) }}</b></div></div>
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6 relative">
+
+    <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 mb-6">
+      <div class="flex justify-between items-end">
+        <div>
+          <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-bold">Администрирование</p>
+          <h1 class="text-3xl font-black text-slate-900 dark:text-white mt-2">Панель администратора</h1>
+        </div>
+        <div class="flex gap-3">
+          <button @click="reloadAll" class="px-5 py-2.5 bg-white dark:bg-white/10 border border-slate-300 dark:border-white/10 rounded-2xl text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-white/20 transition-colors">
+            {{ busy.reload ? 'Обновление...' : 'Синхронизировать' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="status" class="mt-4 p-4 rounded-xl text-sm font-medium border" :class="status.kind === 'error' ? 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800/30 dark:text-red-300' : 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800/30 dark:text-green-300'">
+        {{ status.message }}
+      </div>
     </div>
 
-    <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 flex flex-wrap gap-3"><button type="button" class="h-11 px-5 rounded-2xl bg-blue-600 text-white text-sm font-black disabled:opacity-60" :disabled="busy.maintenance" @click="importPastSemester">{{ busy.maintenance ? 'Выполняем...' : 'Импортировать прошлый семестр' }}</button><button type="button" class="h-11 px-5 rounded-2xl bg-red-500 text-white text-sm font-black disabled:opacity-60" :disabled="busy.maintenance" @click="resetRetakes">{{ busy.maintenance ? 'Выполняем...' : 'Сбросить пересдачи' }}</button></div>
+    <div class="flex space-x-6 border-b border-slate-200 dark:border-white/10 overflow-x-auto">
+      <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
+              :class="['pb-4 text-sm font-bold transition-colors whitespace-nowrap', activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300']">
+        {{ tab.label }}
+      </button>
+    </div>
 
-    <div class="grid gap-6 xl:grid-cols-2">
-      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
-        <h2 class="text-xl font-black text-slate-950 dark:text-white">Пользователи</h2>
-        <form class="grid gap-3" @submit.prevent="submitEntity('user')"><input v-model="userForm.username" type="text" required placeholder="Логин" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><input v-model="userForm.full_name" type="text" required placeholder="ФИО" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><div class="grid grid-cols-2 gap-3"><select v-model="userForm.role" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="ADMIN">ADMIN</option><option value="EMPLOYEE">EMPLOYEE</option><option value="TEACHER">TEACHER</option></select><select v-model="userForm.department_id" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="">Основная кафедра</option><option v-for="department in departments" :key="department.id" :value="String(department.id)">{{ department.short_name }} ({{ department.name }})</option></select></div><select v-model="userForm.teacher_uuid" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="">Связанный преподаватель</option><option v-for="teacher in teacherDirectory" :key="teacher.uuid" :value="teacher.uuid">{{ teacher.fullName }} ({{ teacher.uuid }})</option></select><input v-model="userForm.password" :required="editing.userId === null" type="password" :placeholder="editing.userId === null ? 'Пароль' : 'Новый пароль (необязательно)'" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><label class="flex items-center gap-3 text-sm"><input v-model="userForm.is_active" type="checkbox" /> Активный пользователь</label><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4 space-y-2"><p class="text-xs uppercase tracking-[0.18em] text-slate-500 font-bold">Кафедры доступа</p><label v-for="department in departments" :key="department.id" class="flex items-center gap-3 text-sm"><input type="checkbox" :checked="userForm.department_ids.includes(department.id)" @change="userForm.department_ids = toggleSelection(userForm.department_ids, department.id, checkboxChecked($event))" /> {{ department.short_name }} ({{ department.name }})</label></div><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.user">{{ busy.user ? 'Сохраняем...' : editing.userId === null ? 'Создать' : 'Сохранить' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetUserForm">Сбросить</button></div></form>
-        <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10"><table class="w-full text-sm"><thead class="bg-slate-50 dark:bg-black/10"><tr><th class="px-3 py-2 text-left">Логин</th><th class="px-3 py-2 text-left">ФИО</th><th class="px-3 py-2 text-left">Кафедры</th><th class="px-3 py-2 text-left">Преподаватель</th><th class="px-3 py-2 text-left">Действия</th></tr></thead><tbody><tr v-for="item in users" :key="item.id" class="border-t border-slate-100 dark:border-white/10"><td class="px-3 py-2">{{ item.username }}<div class="text-xs text-slate-500">{{ item.role }} / {{ item.isActive ? 'активен' : 'деактивирован' }}</div></td><td class="px-3 py-2">{{ item.fullName }}</td><td class="px-3 py-2">{{ departmentLabel(item.departmentId) }}<div class="text-xs text-slate-500">{{ scopeLabel(item.departmentIds) }}</div></td><td class="px-3 py-2">{{ teacherDirectoryLabel(item.teacherUuid) }}</td><td class="px-3 py-2 flex gap-2"><button type="button" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-xs font-semibold" @click="editUser(item)">Редактировать</button><button type="button" class="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-xs font-semibold disabled:opacity-50" :disabled="item.id === props.currentUserId" @click="item.id === props.currentUserId ? setStatus('error', 'Нельзя удалить собственную учётную запись.') : deleteEntity(`/users/${item.id}`, 'Пользователь удалён.')">Удалить</button></td></tr></tbody></table></div>
+    <div v-if="activeTab === 'teachers'" class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <h2 class="text-xl font-black text-slate-900 dark:text-white">Штат преподавателей</h2>
+        <div class="flex gap-2">
+          <button class="px-4 py-2 border border-slate-300 dark:border-white/20 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10">🔄 Подтянуть из API</button>
+          <button @click="showTeacherModal = true" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all">+ Добавить</button>
+        </div>
       </div>
+
+      <div class="overflow-x-auto rounded-2xl border border-slate-100 dark:border-white/5">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-50 dark:bg-black/20 text-slate-600 dark:text-slate-400">
+          <tr>
+            <th class="px-5 py-4 font-bold">ФИО Преподавателя</th>
+            <th class="px-5 py-4 font-bold">Кафедра</th>
+            <th class="px-5 py-4 font-bold">Должность</th>
+            <th class="px-5 py-4 font-bold">Аккаунт системы</th>
+            <th class="px-5 py-4 font-bold text-right">Действия</th>
+          </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-white/5">
+          <tr v-for="t in teachers" :key="t.id" class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+            <td class="px-5 py-4 font-semibold text-slate-900 dark:text-white">{{ t.full_name }}</td>
+            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ getDepartmentName(t.department_id) }}</td>
+            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ getPositionName(t.position_id) }}</td>
+            <td class="px-5 py-4">
+              <span v-if="getAccountForTeacher(t.full_name)" class="px-2.5 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-xs font-bold">Есть ({{ getAccountForTeacher(t.full_name)?.username }})</span>
+              <span v-else class="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400 rounded-lg text-xs font-bold">Нет</span>
+            </td>
+            <td class="px-5 py-4 text-right">
+              <button @click="deleteEntity(`/teachers/${t.id}`, 'Удалено')" class="text-red-500 font-bold hover:text-red-700 text-xs">Удалить</button>
+            </td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div v-if="showTeacherModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-slate-200 dark:border-slate-700">
+        <h3 class="text-2xl font-black mb-6 dark:text-white">Новый преподаватель</h3>
+        <form @submit.prevent="submitTeacherFlow" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">ФИО (Полностью)</label>
+            <input v-model="teacherFlowForm.full_name" required type="text" class="w-full h-11 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">Кафедра</label>
+              <select v-model="teacherFlowForm.department_id" required class="w-full h-11 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm">
+                <option value="" disabled>Выберите...</option>
+                <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.short_name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">Должность</label>
+              <select v-model="teacherFlowForm.position_id" class="w-full h-11 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 dark:text-white text-sm">
+                <option value="">Не указана</option>
+                <option v-for="p in positions" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-700 mt-2">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input v-model="teacherFlowForm.create_account" type="checkbox" class="w-5 h-5 rounded" />
+              <span class="text-sm font-bold dark:text-slate-300">Создать аккаунт для входа</span>
+            </label>
+          </div>
+          <div v-if="teacherFlowForm.create_account" class="space-y-4 bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-800/30">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">Логин</label>
+              <input v-model="teacherFlowForm.username" required type="text" class="w-full h-11 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">Пароль</label>
+              <input v-model="teacherFlowForm.password" required type="password" class="w-full h-11 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white text-sm" />
+            </div>
+          </div>
+          <div class="flex gap-3 pt-4">
+            <button type="submit" :disabled="busy.flow" class="flex-1 h-12 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Создать</button>
+            <button type="button" @click="showTeacherModal = false" class="px-6 h-12 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Отмена</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="activeTab === 'departments'" class="grid gap-6 md:grid-cols-2">
       <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
-        <h2 class="text-xl font-black text-slate-950 dark:text-white">Кафедры и должности</h2>
-        <div class="grid gap-6 md:grid-cols-2">
-          <form class="grid gap-3" @submit.prevent="submitEntity('department')"><input v-model="departmentForm.name" type="text" required placeholder="Название кафедры" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><input v-model="departmentForm.short_name" type="text" required placeholder="Сокращение" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.department">{{ busy.department ? 'Сохраняем...' : 'Сохранить кафедру' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetDepartmentForm">Сбросить</button></div><div class="space-y-2"><div v-for="item in departments" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm flex justify-between gap-3"><span>{{ item.short_name }} ({{ item.name }})</span><span class="flex gap-2"><button type="button" class="text-xs font-semibold" @click="editDepartment(item)">Редактировать</button><button type="button" class="text-xs font-semibold text-red-600 dark:text-red-300" @click="deleteEntity(`/departments/${item.id}`, 'Кафедра удалена.')">Удалить</button></span></div></div></form>
-          <form class="grid gap-3" @submit.prevent="submitEntity('position')"><input v-model="positionForm.name" type="text" required placeholder="Название должности" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><input v-model.number="positionForm.sort_order" type="number" placeholder="Порядок сортировки" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><label class="flex items-center gap-3 text-sm"><input v-model="positionForm.is_active" type="checkbox" /> Активная должность</label><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.position">{{ busy.position ? 'Сохраняем...' : 'Сохранить должность' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetPositionForm">Сбросить</button></div><div class="space-y-2"><div v-for="item in positions" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm flex justify-between gap-3"><span>{{ item.name }}<span class="text-xs text-slate-500"> • {{ item.sort_order }} • {{ item.is_active ? 'активна' : 'неактивна' }}</span></span><span class="flex gap-2"><button type="button" class="text-xs font-semibold" @click="editPosition(item)">Редактировать</button><button type="button" class="text-xs font-semibold text-red-600 dark:text-red-300" @click="deleteEntity(`/positions/${item.id}`, 'Должность удалена.')">Удалить</button></span></div></div></form>
+        <h2 class="text-xl font-black text-slate-950 dark:text-white">Кафедры</h2>
+        <form class="grid gap-3" @submit.prevent="submitDepartment">
+          <input v-model="departmentForm.name" type="text" required placeholder="Полное название кафедры" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" />
+          <input v-model="departmentForm.short_name" type="text" required placeholder="Аббревиатура (напр. ИВТ)" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" />
+          <button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.department">{{ busy.department ? 'Создание...' : 'Добавить кафедру' }}</button>
+        </form>
+        <div class="space-y-2 mt-4">
+          <div v-for="item in departments" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm flex justify-between items-center bg-white dark:bg-black/20">
+            <span class="dark:text-white"><b>{{ item.short_name }}</b> <span class="text-slate-500">({{ item.name }})</span></span>
+            <button @click="deleteEntity(`/departments/${item.id}`, 'Удалено')" class="text-red-500 font-bold text-xs">Удалить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
+        <h2 class="text-xl font-black text-slate-950 dark:text-white">Должности</h2>
+        <form class="grid gap-3" @submit.prevent="submitPosition">
+          <input v-model="positionForm.name" type="text" required placeholder="Название должности" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" />
+          <input v-model.number="positionForm.sort_order" type="number" placeholder="Порядок сортировки (цифра)" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" />
+          <button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.position">{{ busy.position ? 'Создание...' : 'Добавить должность' }}</button>
+        </form>
+        <div class="space-y-2 mt-4">
+          <div v-for="item in positions" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm flex justify-between items-center bg-white dark:bg-black/20">
+            <span class="dark:text-white">{{ item.name }}</span>
+            <button @click="deleteEntity(`/positions/${item.id}`, 'Удалено')" class="text-red-500 font-bold text-xs">Удалить</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="grid gap-6 xl:grid-cols-2">
-      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
-        <h2 class="text-xl font-black text-slate-950 dark:text-white">Справочник преподавателей и преподаватели</h2>
-        <div class="grid gap-6 md:grid-cols-2">
-          <form class="grid gap-3" @submit.prevent="submitEntity('teacherDirectory')"><input v-model="teacherDirectoryForm.full_name" type="text" required placeholder="ФИО преподавателя в справочнике" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><div class="rounded-2xl border border-slate-200 dark:border-white/10 p-4 space-y-2"><label v-for="department in departments" :key="department.id" class="flex items-center gap-3 text-sm"><input type="checkbox" :checked="teacherDirectoryForm.department_ids.includes(department.id)" @change="teacherDirectoryForm.department_ids = toggleSelection(teacherDirectoryForm.department_ids, department.id, checkboxChecked($event))" /> {{ department.short_name }} ({{ department.name }})</label></div><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.teacherDirectory">{{ busy.teacherDirectory ? 'Сохраняем...' : 'Сохранить запись' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetTeacherDirectoryForm">Сбросить</button></div><div class="space-y-2"><div v-for="item in teacherDirectory" :key="item.uuid" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm"><div class="font-semibold">{{ item.fullName }}</div><div class="text-xs text-slate-500">{{ item.uuid }}</div><div class="text-xs text-slate-500 mt-1">{{ scopeLabel(item.departmentIds) }}</div><div class="mt-2 flex gap-2"><button type="button" class="text-xs font-semibold" @click="editTeacherDirectory(item)">Редактировать</button><button type="button" class="text-xs font-semibold text-red-600 dark:text-red-300" @click="deleteEntity(`/teacher-directory/${item.uuid}`, 'Преподаватель справочника удалён.')">Удалить</button></div></div></div></form>
-          <form class="grid gap-3" @submit.prevent="submitEntity('teacher')"><input v-model="teacherForm.full_name" type="text" required placeholder="ФИО преподавателя" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><select v-model="teacherForm.department_id" required class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="">Кафедра</option><option v-for="department in departments" :key="department.id" :value="String(department.id)">{{ department.short_name }} ({{ department.name }})</option></select><select v-model="teacherForm.position_id" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="">Должность не указана</option><option v-for="position in positions" :key="position.id" :value="String(position.id)">{{ position.name }}</option></select><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.teacher">{{ busy.teacher ? 'Сохраняем...' : 'Сохранить запись' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetTeacherForm">Сбросить</button></div><div class="space-y-2"><div v-for="item in teachers" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm"><div class="font-semibold">{{ item.full_name }}</div><div class="text-xs text-slate-500">{{ departmentLabel(item.department_id) }} • {{ positionLabel(item.position_id) }}</div><div class="mt-2 flex gap-2"><button type="button" class="text-xs font-semibold" @click="editTeacher(item)">Редактировать</button><button type="button" class="text-xs font-semibold text-red-600 dark:text-red-300" @click="deleteEntity(`/teachers/${item.id}`, 'Преподаватель удалён.')">Удалить</button></div></div></div></form>
+    <div v-if="activeTab === 'snapshots'" class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
+      <h2 class="text-xl font-black dark:text-white mb-6">Снимки расписания (Эталоны)</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div v-for="item in scheduleSnapshots" :key="item.id" class="p-5 border rounded-3xl" :class="item.isReferenceForRetakes ? 'border-green-400 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5'">
+          <span v-if="item.isReferenceForRetakes" class="px-2.5 py-1 bg-green-500 text-white text-[10px] uppercase font-black rounded-lg mb-2 inline-block">Текущий эталон</span>
+          <div class="font-bold text-lg dark:text-white">{{ item.name }}</div>
+          <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">Семестр: {{ item.semesterLabel }}</div>
+          <div class="text-xs text-slate-500 mt-3 space-y-1">
+            <p>Групп: {{item.groupCount}} | Предметов: {{item.subjectCount}} | Записей: {{item.scheduleItemCount}}</p>
+            <p>Дата фиксации: {{ formatDateTime(item.capturedAt) }}</p>
+          </div>
         </div>
       </div>
-      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
-        <h2 class="text-xl font-black text-slate-950 dark:text-white">Schedule snapshots</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 leading-7">Snapshot хранит не только metadata, но и содержимое: `groups`, `subjects`, `teachers`, `scheduleItems`. Backend валидирует связи между ними.</p>
-        <form class="grid gap-3" @submit.prevent="submitEntity('snapshot')"><input v-model="snapshotForm.name" type="text" required placeholder="Название snapshot" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><input v-model="snapshotForm.semester_label" type="text" required placeholder="Метка семестра" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /><div class="grid grid-cols-2 gap-3"><select v-model="snapshotForm.status" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"><option value="draft">draft</option><option value="published">published</option><option value="archived">archived</option></select><input v-model="snapshotForm.source_type" type="text" placeholder="Источник" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm" /></div><textarea v-model="snapshotForm.description" rows="2" placeholder="Описание" class="px-4 py-3 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm"></textarea><input v-model="snapshotForm.captured_at" type="datetime-local" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm [color-scheme:light] dark:[color-scheme:dark]" /><label class="flex items-center gap-3 text-sm"><input v-model="snapshotForm.is_reference_for_retakes" type="checkbox" /> Использовать как reference snapshot</label><textarea v-model="snapshotForm.groups_json" rows="3" class="px-4 py-3 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-xs font-mono" placeholder='[{"uuid":"g-1","number":"ИВТ-101","name":"ИВТ-101"}]'></textarea><textarea v-model="snapshotForm.subjects_json" rows="3" class="px-4 py-3 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-xs font-mono" placeholder='[{"uuid":"s-1","name":"Математика"}]'></textarea><textarea v-model="snapshotForm.teachers_json" rows="3" class="px-4 py-3 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-xs font-mono" placeholder='[{"uuid":"t-1","fullName":"Иван Иванов","departmentIds":[1]}]'></textarea><textarea v-model="snapshotForm.schedule_items_json" rows="5" class="px-4 py-3 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-xs font-mono" placeholder='[{"groupUuid":"g-1","subjectUuid":"s-1","teacherUuids":["t-1"],"weekday":1,"slot":2}]'></textarea><div class="flex gap-3"><button type="submit" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60" :disabled="busy.snapshot">{{ busy.snapshot ? 'Сохраняем...' : 'Сохранить snapshot' }}</button><button type="button" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-semibold" @click="resetSnapshotForm">Сбросить</button></div></form>
-        <div class="space-y-2"><div v-for="item in scheduleSnapshots" :key="item.id" class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm"><div class="font-semibold">{{ item.name }}<span class="text-xs text-slate-500"> • {{ item.semesterLabel }}</span></div><div class="text-xs text-slate-500 mt-1">{{ item.status }} • {{ item.sourceType }} • reference: {{ item.isReferenceForRetakes ? 'да' : 'нет' }}</div><div class="text-xs text-slate-500 mt-1">Группы: {{ item.groupCount }}, дисциплины: {{ item.subjectCount }}, преподаватели: {{ item.teacherCount }}, элементы: {{ item.scheduleItemCount }}</div><div class="text-xs text-slate-500 mt-1">Снят: {{ formatDateTime(item.capturedAt) }} • Создан: {{ formatDateTime(item.createdAt) }}</div><div class="mt-2 flex gap-2"><button type="button" class="text-xs font-semibold disabled:opacity-60" :disabled="busy.snapshotLoad" @click="editSnapshot(item)">{{ busy.snapshotLoad && editing.snapshotId === item.id ? 'Загружаем...' : 'Редактировать' }}</button><button type="button" class="text-xs font-semibold text-red-600 dark:text-red-300" @click="deleteEntity(`/schedule-snapshots/${item.id}`, 'Snapshot удалён.')">Удалить</button></div></div></div>
+
+      <div class="mt-8 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-5 rounded-2xl">
+        <h3 class="font-bold text-blue-900 dark:text-blue-300 mb-2">Обновление расписания на новый семестр</h3>
+        <p class="text-sm text-blue-700 dark:text-blue-400 mb-4">Для загрузки нового эталонного расписания, подготовьте JSON файл. Загрузка через интерфейс будет добавлена в следующем обновлении API.</p>
+        <button class="px-6 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl text-sm disabled:opacity-50" disabled>Загрузить файл (Скоро)</button>
       </div>
     </div>
+
   </section>
 </template>
