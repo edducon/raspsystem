@@ -53,3 +53,10 @@ def delete_teacher_directory_entry(
 ) -> Response:
     TeacherDirectoryService(db).delete_teacher(teacher_uuid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/sync", response_model=dict)
+def sync_teacher_directory(
+        _: object = Depends(require_admin),
+        db: Session = Depends(get_db),
+) -> dict:
+    return TeacherDirectoryService(db).sync_teachers()

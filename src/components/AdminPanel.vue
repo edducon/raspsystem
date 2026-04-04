@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { reactive, ref, computed } from 'vue';
 import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
 
 type UserRole = 'ADMIN' | 'EMPLOYEE' | 'TEACHER';
@@ -38,16 +38,18 @@ const tabs = [
   { id: 'snapshots', label: 'Снимки расписания' }
 ];
 
-const busy = reactive({ reload: false, maintenance: false, flow: false, department: false, position: false, user: false });
+const busy = reactive({ reload: false, flow: false, department: false, position: false, syncTeachers: false, importPastSemester: false });
 
 const showTeacherModal = ref(false);
 const teacherFlowForm = reactive({ full_name: '', department_id: '', position_id: '', create_account: false, username: '', password: '' });
 const departmentForm = reactive({ name: '', short_name: '' });
 const positionForm = reactive({ name: '', sort_order: 0, is_active: true });
-const userForm = reactive({ username: '', full_name: '', role: 'EMPLOYEE' as UserRole, is_active: true, department_id: '', department_ids: [] as number[], teacher_uuid: '', password: '' });
+
+const pastSemesterFileInput = ref<HTMLInputElement | null>(null);
+const pastSemesterStatus = ref<{ imported: number; groups: number; subjects: number } | null>(null);
 
 const errorText = (error: unknown, fallback: string) => error instanceof BackendApiError ? error.detail : error instanceof Error ? error.message : fallback;
-const setStatus = (kind: StatusKind, message: string) => { status.value = { kind, message }; setTimeout(() => status.value = null, 5000); };
+const setStatus = (kind: StatusKind, message: string) => { status.value = { kind, message }; setTimeout(() => status.value = null, 8000); };
 
 const getDepartmentName = (id: number | null | string) => {
   if (!id) return '—';
@@ -62,6 +64,8 @@ const getPositionName = (id: number | null | string) => {
 };
 
 const getAccountForTeacher = (fullName: string) => users.value.find(u => u.fullName === fullName);
+
+const hasReferenceSnapshot = computed(() => scheduleSnapshots.value.some(s => s.isReferenceForRetakes));
 
 async function reloadAll() {
   busy.reload = true;
@@ -82,10 +86,9 @@ async function reloadAll() {
 async function submitDepartment() {
   busy.department = true;
   try {
-    // Используем camelCase для Pydantic v2
     await fetchBackendFromBrowser(props.backendApiUrl, '/departments/', {
       method: 'POST',
-      body: JSON.stringify({ name: departmentForm.name.trim(), shortName: departmentForm.short_name.trim() })
+      body: JSON.stringify({ name: departmentForm.name.trim(), short_name: departmentForm.short_name.trim() })
     });
     setStatus('success', 'Кафедра создана.');
     departmentForm.name = ''; departmentForm.short_name = '';
@@ -97,10 +100,9 @@ async function submitDepartment() {
 async function submitPosition() {
   busy.position = true;
   try {
-    // Используем camelCase для Pydantic v2
     await fetchBackendFromBrowser(props.backendApiUrl, '/positions/', {
       method: 'POST',
-      body: JSON.stringify({ name: positionForm.name.trim(), sortOrder: Number(positionForm.sort_order), isActive: positionForm.is_active })
+      body: JSON.stringify({ name: positionForm.name.trim(), sort_order: Number(positionForm.sort_order), is_active: positionForm.is_active })
     });
     setStatus('success', 'Должность создана.');
     positionForm.name = ''; positionForm.sort_order = 0;
@@ -113,16 +115,16 @@ async function submitTeacherFlow() {
   busy.flow = true;
   try {
     const directoryRes = await fetchBackendFromBrowser<{uuid: string}>(props.backendApiUrl, '/teacher-directory/', {
-      method: 'POST', body: JSON.stringify({ fullName: teacherFlowForm.full_name, departmentIds: [Number(teacherFlowForm.department_id)] })
+      method: 'POST', body: JSON.stringify({ full_name: teacherFlowForm.full_name, department_ids: [Number(teacherFlowForm.department_id)] })
     });
 
     await fetchBackendFromBrowser(props.backendApiUrl, '/teachers/', {
-      method: 'POST', body: JSON.stringify({ fullName: teacherFlowForm.full_name, departmentId: Number(teacherFlowForm.department_id), positionId: teacherFlowForm.position_id ? Number(teacherFlowForm.position_id) : null })
+      method: 'POST', body: JSON.stringify({ full_name: teacherFlowForm.full_name, department_id: Number(teacherFlowForm.department_id), position_id: teacherFlowForm.position_id ? Number(teacherFlowForm.position_id) : null })
     });
 
     if (teacherFlowForm.create_account) {
       await fetchBackendFromBrowser(props.backendApiUrl, '/users/', {
-        method: 'POST', body: JSON.stringify({ username: teacherFlowForm.username, password: teacherFlowForm.password, fullName: teacherFlowForm.full_name, role: 'TEACHER', isActive: true, departmentId: Number(teacherFlowForm.department_id), departmentIds: [Number(teacherFlowForm.department_id)], teacherUuid: directoryRes.uuid })
+        method: 'POST', body: JSON.stringify({ username: teacherFlowForm.username, password: teacherFlowForm.password, full_name: teacherFlowForm.full_name, role: 'TEACHER', is_active: true, department_id: Number(teacherFlowForm.department_id), department_ids: [Number(teacherFlowForm.department_id)], teacher_uuid: directoryRes.uuid })
       });
     }
 
@@ -134,10 +136,64 @@ async function submitTeacherFlow() {
   finally { busy.flow = false; }
 }
 
+async function syncTeachersFromApi() {
+  busy.syncTeachers = true;
+  try {
+    const result = await fetchBackendFromBrowser<any>(props.backendApiUrl, '/retakes/admin/sync-teachers', {
+      method: 'POST',
+    });
+    setStatus('success', result.message || 'Синхронизация завершена.');
+    await reloadAll();
+  } catch (error) {
+    setStatus('error', errorText(error, 'Ошибка синхронизации преподавателей.'));
+  } finally {
+    busy.syncTeachers = false;
+  }
+}
+
+function triggerPastSemesterUpload() {
+  pastSemesterFileInput.value?.click();
+}
+
+async function handlePastSemesterFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  busy.importPastSemester = true;
+  try {
+    const text = await file.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      setStatus('error', 'Файл содержит некорректный JSON.');
+      return;
+    }
+
+    const result = await fetchBackendFromBrowser<any>(props.backendApiUrl, '/retakes/admin/past-semester/import-json', {
+      method: 'POST',
+      body: JSON.stringify(json),
+    });
+
+    pastSemesterStatus.value = {
+      imported: result.importedRecords ?? result.imported_records ?? 0,
+      groups: result.uniqueGroups ?? result.unique_groups ?? 0,
+      subjects: result.uniqueSubjects ?? result.unique_subjects ?? 0,
+    };
+    setStatus('success', result.message || `Импорт завершён. Записей: ${pastSemesterStatus.value.imported}.`);
+  } catch (error) {
+    setStatus('error', errorText(error, 'Ошибка импорта расписания прошлого семестра.'));
+  } finally {
+    busy.importPastSemester = false;
+    input.value = '';
+  }
+}
+
 async function deleteEntity(path: string, msg: string) {
   if (!window.confirm('Вы уверены?')) return;
   try { await fetchBackendFromBrowser(props.backendApiUrl, path, { method: 'DELETE' }); setStatus('success', msg); await reloadAll(); }
-  catch(error) { setStatus('error', 'Ошибка при удалении.'); }
+  catch(error) { setStatus('error', errorText(error, 'Ошибка при удалении.')); }
 }
 
 function formatDateTime(value: string | null) {
@@ -155,8 +211,8 @@ function formatDateTime(value: string | null) {
           <h1 class="text-3xl font-black text-slate-900 dark:text-white mt-2">Панель администратора</h1>
         </div>
         <div class="flex gap-3">
-          <button @click="reloadAll" class="px-5 py-2.5 bg-white dark:bg-white/10 border border-slate-300 dark:border-white/10 rounded-2xl text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-white/20 transition-colors">
-            {{ busy.reload ? 'Обновление...' : 'Синхронизировать' }}
+          <button @click="reloadAll" :disabled="busy.reload" class="px-5 py-2.5 bg-white dark:bg-white/10 border border-slate-300 dark:border-white/10 rounded-2xl text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-white/20 transition-colors disabled:opacity-50">
+            {{ busy.reload ? 'Обновление...' : 'Обновить данные' }}
           </button>
         </div>
       </div>
@@ -173,11 +229,17 @@ function formatDateTime(value: string | null) {
       </button>
     </div>
 
+    <!-- Teachers tab -->
     <div v-if="activeTab === 'teachers'" class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
       <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <h2 class="text-xl font-black text-slate-900 dark:text-white">Штат преподавателей</h2>
+        <div>
+          <h2 class="text-xl font-black text-slate-900 dark:text-white">Штат преподавателей</h2>
+          <p class="text-xs text-slate-500 mt-1">В справочнике: {{ teacherDirectory.length }} | В штате: {{ teachers.length }}</p>
+        </div>
         <div class="flex gap-2">
-          <button class="px-4 py-2 border border-slate-300 dark:border-white/20 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10">🔄 Подтянуть из API</button>
+          <button @click="syncTeachersFromApi" :disabled="busy.syncTeachers" class="px-4 py-2 border border-slate-300 dark:border-white/20 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50 transition-colors">
+            {{ busy.syncTeachers ? '⏳ Загрузка...' : '🔄 Подтянуть из API' }}
+          </button>
           <button @click="showTeacherModal = true" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all">+ Добавить</button>
         </div>
       </div>
@@ -211,6 +273,7 @@ function formatDateTime(value: string | null) {
       </div>
     </div>
 
+    <!-- Teacher modal -->
     <div v-if="showTeacherModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
       <div class="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-slate-200 dark:border-slate-700">
         <h3 class="text-2xl font-black mb-6 dark:text-white">Новый преподаватель</h3>
@@ -259,6 +322,7 @@ function formatDateTime(value: string | null) {
       </div>
     </div>
 
+    <!-- Departments tab -->
     <div v-if="activeTab === 'departments'" class="grid gap-6 md:grid-cols-2">
       <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
         <h2 class="text-xl font-black text-slate-950 dark:text-white">Кафедры</h2>
@@ -291,25 +355,57 @@ function formatDateTime(value: string | null) {
       </div>
     </div>
 
-    <div v-if="activeTab === 'snapshots'" class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
-      <h2 class="text-xl font-black dark:text-white mb-6">Снимки расписания (Эталоны)</h2>
+    <!-- Snapshots tab -->
+    <div v-if="activeTab === 'snapshots'" class="space-y-6">
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div v-for="item in scheduleSnapshots" :key="item.id" class="p-5 border rounded-3xl" :class="item.isReferenceForRetakes ? 'border-green-400 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5'">
-          <span v-if="item.isReferenceForRetakes" class="px-2.5 py-1 bg-green-500 text-white text-[10px] uppercase font-black rounded-lg mb-2 inline-block">Текущий эталон</span>
-          <div class="font-bold text-lg dark:text-white">{{ item.name }}</div>
-          <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">Семестр: {{ item.semesterLabel }}</div>
-          <div class="text-xs text-slate-500 mt-3 space-y-1">
-            <p>Групп: {{item.groupCount}} | Предметов: {{item.subjectCount}} | Записей: {{item.scheduleItemCount}}</p>
-            <p>Дата фиксации: {{ formatDateTime(item.capturedAt) }}</p>
-          </div>
+      <!-- Past semester import -->
+      <div class="rounded-3xl border border-amber-200 dark:border-amber-800/30 bg-amber-50/80 dark:bg-amber-900/10 p-6">
+        <h2 class="text-xl font-black text-amber-900 dark:text-amber-300 mb-2">Расписание за прошлый семестр</h2>
+        <p class="text-sm text-amber-700 dark:text-amber-400 mb-4">
+          Загрузите файл <code class="bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded text-xs font-mono">schedules.json</code> с расписанием за предыдущий семестр.
+          Он используется для определения дисциплин и преподавателей при назначении пересдач.
+        </p>
+
+        <div v-if="pastSemesterStatus" class="mb-4 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/30">
+          <p class="text-sm font-bold text-green-800 dark:text-green-300">✅ Данные загружены</p>
+          <p class="text-xs text-green-700 dark:text-green-400 mt-1">
+            Записей: {{ pastSemesterStatus.imported }} | Групп: {{ pastSemesterStatus.groups }} | Дисциплин: {{ pastSemesterStatus.subjects }}
+          </p>
         </div>
+
+        <input ref="pastSemesterFileInput" type="file" accept=".json" class="hidden" @change="handlePastSemesterFile" />
+        <button
+            @click="triggerPastSemesterUpload"
+            :disabled="busy.importPastSemester"
+            class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors"
+        >
+          {{ busy.importPastSemester ? '⏳ Импорт...' : '📂 Загрузить schedules.json' }}
+        </button>
       </div>
 
-      <div class="mt-8 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-5 rounded-2xl">
-        <h3 class="font-bold text-blue-900 dark:text-blue-300 mb-2">Обновление расписания на новый семестр</h3>
-        <p class="text-sm text-blue-700 dark:text-blue-400 mb-4">Для загрузки нового эталонного расписания, подготовьте JSON файл. Загрузка через интерфейс будет добавлена в следующем обновлении API.</p>
-        <button class="px-6 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl text-sm disabled:opacity-50" disabled>Загрузить файл (Скоро)</button>
+      <!-- Snapshots list -->
+      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
+        <h2 class="text-xl font-black dark:text-white mb-6">Снимки расписания (Эталоны)</h2>
+
+        <div v-if="scheduleSnapshots.length === 0" class="text-center py-10 text-slate-400 dark:text-slate-500">
+          <p class="text-sm">Снимки расписания ещё не загружены.</p>
+          <p class="text-xs mt-2">Используйте API endpoint <code class="bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">POST /api/schedule-snapshots/</code> для создания снимка.</p>
+        </div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div v-for="item in scheduleSnapshots" :key="item.id" class="p-5 border rounded-3xl" :class="item.isReferenceForRetakes ? 'border-green-400 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5'">
+            <span v-if="item.isReferenceForRetakes" class="px-2.5 py-1 bg-green-500 text-white text-[10px] uppercase font-black rounded-lg mb-2 inline-block">Текущий эталон</span>
+            <div class="font-bold text-lg dark:text-white">{{ item.name }}</div>
+            <div class="text-sm text-slate-600 dark:text-slate-300 font-medium">Семестр: {{ item.semesterLabel }}</div>
+            <div class="text-xs text-slate-500 mt-3 space-y-1">
+              <p>Групп: {{item.groupCount}} | Предметов: {{item.subjectCount}} | Преподов: {{item.teacherCount}} | Записей: {{item.scheduleItemCount}}</p>
+              <p>Дата фиксации: {{ formatDateTime(item.capturedAt) }}</p>
+            </div>
+            <div class="mt-3">
+              <button @click="deleteEntity(`/schedule-snapshots/${item.id}`, 'Снимок удалён')" class="text-red-500 font-bold text-xs hover:text-red-700">Удалить</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

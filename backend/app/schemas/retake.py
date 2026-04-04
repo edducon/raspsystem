@@ -1,97 +1,120 @@
 from datetime import datetime
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic.alias_generators import to_camel
+
 
 class RetakeTeacherRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    teacher_uuid: str
-    full_name: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    teacher_uuid: Annotated[str, Field(alias="teacherUuid")]
+    full_name: Annotated[str, Field(alias="fullName")]
     role: str
 
+
 class RetakeRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
-    group_uuid: str
-    subject_uuid: str
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
     date: str
-    time_slots: list[int]
-    room_uuid: str | None = None
+    time_slots: Annotated[list[int], Field(alias="timeSlots")]
+    room_uuid: Annotated[str | None, Field(default=None, alias="roomUuid")]
     link: str | None = None
-    attempt_number: int
-    created_by: str | None = None
-    created_at: datetime | None = None
-    can_delete: bool = False
+    attempt_number: Annotated[int, Field(alias="attemptNumber")]
+    created_by: Annotated[str | None, Field(default=None, alias="createdBy")]
+    created_at: Annotated[datetime | None, Field(default=None, alias="createdAt")]
+    can_delete: Annotated[bool, Field(default=False, alias="canDelete")]
     teachers: list[RetakeTeacherRead] = Field(default_factory=list)
 
+
 class GroupRetakeRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
-    subject_uuid: str
-    attempt_number: int
+    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
+    attempt_number: Annotated[int, Field(alias="attemptNumber")]
     date: str
-    created_by: str | None = None
-    can_delete: bool = False
+    created_by: Annotated[str | None, Field(default=None, alias="createdBy")]
+    can_delete: Annotated[bool, Field(default=False, alias="canDelete")]
+
 
 class TeacherRetakeRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
-    group_uuid: str
-    subject_uuid: str
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
     date: str
-    time_slots: list[int]
+    time_slots: Annotated[list[int], Field(alias="timeSlots")]
     room: str | None = None
     link: str | None = None
-    attempt_number: int
-    my_role: str
+    attempt_number: Annotated[int, Field(alias="attemptNumber")]
+    my_role: Annotated[str, Field(alias="myRole")]
+
 
 class GroupHistoryEntryRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    subject_name: str
-    teacher_names: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(populate_by_name=True)
+
+    subject_name: Annotated[str, Field(alias="subjectName")]
+    teacher_names: Annotated[list[str], Field(default_factory=list, alias="teacherNames")]
+
 
 class RetakeSubjectOptionRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     uuid: str
     name: str
 
+
 class RetakeFormContextRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    group_number: str
-    group_uuid: str
-    subject_uuid: str | None = None
-    main_teacher_uuids: list[str] = Field(default_factory=list)
-    commission_teacher_uuids: list[str] = Field(default_factory=list)
-    chairman_uuid: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    group_number: Annotated[str, Field(alias="groupNumber")]
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    subject_uuid: Annotated[str | None, Field(default=None, alias="subjectUuid")]
+    main_teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="mainTeacherUuids")]
+    commission_teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="commissionTeacherUuids")]
+    chairman_uuid: Annotated[str | None, Field(default=None, alias="chairmanUuid")]
+
 
 class RetakeFormContextRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    group_history: list[GroupHistoryEntryRead] = Field(default_factory=list)
-    existing_retakes: list[GroupRetakeRead] = Field(default_factory=list)
-    available_subjects: list[RetakeSubjectOptionRead] = Field(default_factory=list)
-    subject_blocked_reason: str | None = None
-    assigned_attempts: list[int] = Field(default_factory=list)
-    next_attempt_number: int = 1
-    available_main_teacher_uuids: list[str] = Field(default_factory=list)
-    available_commission_teacher_uuids: list[str] = Field(default_factory=list)
-    available_chairman_uuids: list[str] = Field(default_factory=list)
-    main_teacher_lacks_dept: bool = False
+    model_config = ConfigDict(populate_by_name=True)
+
+    group_history: Annotated[list[GroupHistoryEntryRead], Field(default_factory=list, alias="groupHistory")]
+    existing_retakes: Annotated[list[GroupRetakeRead], Field(default_factory=list, alias="existingRetakes")]
+    available_subjects: Annotated[list[RetakeSubjectOptionRead], Field(default_factory=list, alias="availableSubjects")]
+    subject_blocked_reason: Annotated[str | None, Field(default=None, alias="subjectBlockedReason")]
+    assigned_attempts: Annotated[list[int], Field(default_factory=list, alias="assignedAttempts")]
+    next_attempt_number: Annotated[int, Field(default=1, alias="nextAttemptNumber")]
+    available_main_teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="availableMainTeacherUuids")]
+    available_commission_teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="availableCommissionTeacherUuids")]
+    available_chairman_uuids: Annotated[list[str], Field(default_factory=list, alias="availableChairmanUuids")]
+    main_teacher_lacks_dept: Annotated[bool, Field(default=False, alias="mainTeacherLacksDept")]
+
 
 class MergedDayDetailsRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     subject: str
     type: str
     location: str
 
+
 class MergedDaySlotRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+    model_config = ConfigDict(populate_by_name=True)
+
     reason: str
     details: MergedDayDetailsRead
 
+
 class MergedDayScheduleRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    group_number: str
-    group_uuid: str
-    teacher_uuids: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(populate_by_name=True)
+
+    group_number: Annotated[str, Field(alias="groupNumber")]
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="teacherUuids")]
     date: str
 
     @field_validator("date")
@@ -101,19 +124,21 @@ class MergedDayScheduleRequest(BaseModel):
             raise ValueError("Дата должна быть в формате ГГГГ-ММ-ДД.")
         return value
 
+
 class RetakeCreateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-    group_number: str
-    group_uuid: str
-    subject_uuid: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    group_number: Annotated[str, Field(alias="groupNumber")]
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
     date: str
-    time_slots: list[int]
-    room_uuid: str | None = None
+    time_slots: Annotated[list[int], Field(alias="timeSlots")]
+    room_uuid: Annotated[str | None, Field(default=None, alias="roomUuid")]
     link: str | None = None
-    attempt_number: int = 1
-    main_teacher_uuids: list[str]
-    commission_teacher_uuids: list[str] = Field(default_factory=list)
-    chairman_uuid: str | None = None
+    attempt_number: Annotated[int, Field(default=1, alias="attemptNumber")]
+    main_teacher_uuids: Annotated[list[str], Field(alias="mainTeacherUuids")]
+    commission_teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="commissionTeacherUuids")]
+    chairman_uuid: Annotated[str | None, Field(default=None, alias="chairmanUuid")]
 
     @field_validator("date")
     @classmethod

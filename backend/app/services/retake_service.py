@@ -339,21 +339,31 @@ class RetakeService:
 
     def _ensure_teacher_access(self, user: User, data: RetakeCreateRequest, teacher_map: dict[str, TeacherLocal]) -> None:
         main_teachers = [teacher_map[uuid] for uuid in data.main_teacher_uuids]
-        main_departments = {department_id for teacher in main_teachers for department_id in (teacher.department_ids or [])}
+        if not main_teachers:
+            return
+
+        # ИСПРАВЛЕНИЕ: Строгое пересечение вместо объединения
+        main_departments = set(main_teachers[0].department_ids or [])
+        for teacher in main_teachers[1:]:
+            main_departments.intersection_update(set(teacher.department_ids or []))
 
         if user.role != "ADMIN":
             user_departments = set(user.department_ids or [])
-            if any(teacher.department_ids and not user_departments.intersection(set(teacher.department_ids)) for teacher in main_teachers):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ведущие преподаватели должны быть с вашей кафедры.")
+            if not main_departments or not user_departments.intersection(main_departments):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ведущие преподаватели не относятся к вашей кафедре.")
 
         if main_departments:
             commission_uuids = list(data.commission_teacher_uuids)
             if data.chairman_uuid:
                 commission_uuids.append(data.chairman_uuid)
 
-            invalid_commission = [uuid for uuid in commission_uuids if teacher_map[uuid].department_ids and not main_departments.intersection(set(teacher_map[uuid].department_ids))]
+            # ИСПРАВЛЕНИЕ: Каждый член комиссии должен разделять общую кафедру с ведущими
+            invalid_commission = [
+                uuid for uuid in commission_uuids
+                if not main_departments.intersection(set(teacher_map[uuid].department_ids or []))
+            ]
             if invalid_commission:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комиссия должна быть с той же кафедры.")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комиссия должна быть с той же кафедры, что и ведущий преподаватель.")
 
     def _resolve_subject_name(self, subject_uuid: str) -> str:
         reference_name = self.reference_schedule.find_subject_name(subject_uuid)
@@ -465,7 +475,6 @@ class RetakeService:
         return self.reference_schedule.get_group_subjects(group_uuid) if self.reference_schedule.has_reference_snapshot() else []
 
     def _list_schedule_subjects(self) -> list[dict]:
-        # ВАЖНО: Мы больше не ходим в живое API за предметами. Строго берем из Эталонного Снимка!
         if self.reference_schedule.has_reference_snapshot():
             return self.reference_schedule.list_subjects()
         return []
@@ -488,13 +497,24 @@ class RetakeService:
 
     def _build_commission_context(self, main_teacher_uuids: list[str], commission_teacher_uuids: list[str], chairman_uuid: str | None) -> dict[str, object]:
         selected_main = self._load_teacher_map(main_teacher_uuids)
-        main_departments = {department_id for teacher in selected_main.values() for department_id in (teacher.department_ids or [])}
+        teachers_list = list(selected_main.values())
+
+        if not teachers_list:
+            return {"main_teacher_lacks_dept": False, "available_commission_teacher_uuids": [], "available_chairman_uuids": []}
+
+        # ИСПРАВЛЕНИЕ: Строгое пересечение кафедр ведущих преподавателей
+        main_departments = set(teachers_list[0].department_ids or [])
+        for teacher in teachers_list[1:]:
+            main_departments.intersection_update(set(teacher.department_ids or []))
+
         main_teacher_lacks_dept = bool(main_teacher_uuids) and not main_departments
         if not main_departments:
             return {"main_teacher_lacks_dept": main_teacher_lacks_dept, "available_commission_teacher_uuids": [], "available_chairman_uuids": []}
 
         pool = list(self.db.scalars(select(TeacherLocal).order_by(TeacherLocal.full_name.asc())).all())
+        # ИСПРАВЛЕНИЕ: Оставляем в комиссии только тех, кто имеет хотя бы одну из ОБЩИХ кафедр ведущих
         allowed_pool = [teacher for teacher in pool if main_departments.intersection(set(teacher.department_ids or []))]
+
         selected_main_uuids = set(main_teacher_uuids)
         selected_commission_uuids = set(commission_teacher_uuids)
 
@@ -528,7 +548,13 @@ class RetakeService:
         if not history_teachers:
             return None
 
-        has_shared_department = any(user_departments.intersection(set(teacher.department_ids or [])) for teacher in history_teachers)
+        # ИСПРАВЛЕНИЕ: Строгое пересечение. Ищем кафедру, общую для ВСЕХ преподавателей этого предмета
+        common_depts = set(history_teachers[0].department_ids or [])
+        for teacher in history_teachers[1:]:
+            common_depts.intersection_update(set(teacher.department_ids or []))
+
+        # Доступ дается, если у пользователя есть совпадение с этой строгой общей кафедрой
+        has_shared_department = bool(user_departments.intersection(common_depts))
         return None if has_shared_department else "Эта дисциплина относится к другой кафедре."
 
     def _group_schedule_root(self, group_number: str) -> dict:

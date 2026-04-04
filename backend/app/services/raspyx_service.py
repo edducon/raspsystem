@@ -36,8 +36,6 @@ class RaspyxService:
             detail = exc.read().decode("utf-8", errors="ignore")
             raise RuntimeError(f"Raspyx request failed with {exc.code}: {detail}") from exc
         except (error.URLError, TimeoutError, socket.timeout) as exc:
-            # Если внешний API упал или долго отвечает — не крашим систему,
-            # а возвращаем пустой результат. RetakeService переключится на Snapshot.
             print(f"[RaspyxService] API Connection Error / Timeout: {exc}")
             return {"success": False, "result": [], "response": []}
 
@@ -65,7 +63,6 @@ class RaspyxService:
                 },
             )
         except Exception:
-            # Если авторизация упала по таймауту
             return "offline_mock_token"
 
         token = None
@@ -87,6 +84,10 @@ class RaspyxService:
 
     def get_subjects(self) -> object:
         return self._cached_get("/subjects")
+
+    def get_teachers(self) -> object:
+        """GET /v2/teachers — список всех преподавателей {uuid, full_name}."""
+        return self._cached_get("/teachers")
 
     def get_group_schedule(self, group_number: str, *, is_session: bool = False) -> object:
         encoded = parse.quote(group_number)

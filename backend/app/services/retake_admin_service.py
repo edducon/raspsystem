@@ -17,12 +17,18 @@ class RetakeAdminService:
     def import_past_semester(self, source_path: str | None = None) -> dict:
         file_path = self._resolve_source_path(source_path)
         payload = self._load_payload(file_path)
+        return self._do_import(payload, source_label=str(file_path))
 
+    def import_past_semester_json(self, payload: dict) -> dict:
+        """Import past semester data from a JSON payload sent directly from the frontend."""
+        return self._do_import(payload, source_label="browser-upload")
+
+    def _do_import(self, payload: dict, source_label: str) -> dict:
         raw_schedule = payload.get("response")
         if payload.get("status") != "OK" or not isinstance(raw_schedule, dict):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Файл schedules.json имеет некорректный формат.",
+                detail='Файл имеет некорректный формат. Ожидается {"status": "OK", "response": {...}}.',
             )
 
         records_map: dict[tuple[str, str], set[str]] = {}
@@ -68,7 +74,7 @@ class RetakeAdminService:
 
         return {
             "success": True,
-            "source_path": str(file_path),
+            "source_path": source_label,
             "imported_records": len(rows),
             "unique_groups": len({row.group_name for row in rows}),
             "unique_subjects": len({row.subject_name for row in rows}),
@@ -108,7 +114,7 @@ class RetakeAdminService:
                     Path.cwd() / "schedules.json",
                     repo_root / "schedules.json",
                     repo_root / "backend" / "schedules.json",
-                ]
+                    ]
             )
 
         checked_paths: list[str] = []
@@ -120,7 +126,7 @@ class RetakeAdminService:
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Файл данных за прошлый семестр не найден. Проверены пути: {', '.join(checked_paths)}.",
+            detail=f"Файл не найден. Проверены пути: {', '.join(checked_paths)}.",
         )
 
     def _load_payload(self, file_path: Path) -> dict:
@@ -129,10 +135,10 @@ class RetakeAdminService:
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Файл данных за прошлый семестр не найден: {file_path}.",
+                detail=f"Файл не найден: {file_path}.",
             ) from exc
         except json.JSONDecodeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Файл данных за прошлый семестр содержит некорректный JSON: {exc}.",
+                detail=f"Некорректный JSON: {exc}.",
             ) from exc

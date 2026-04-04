@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -18,24 +19,24 @@ class ScheduleSnapshotTeacher(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     uuid: str
-    full_name: str = Field(alias="fullName")
-    department_ids: list[int] = Field(default_factory=list, alias="departmentIds")
+    full_name: Annotated[str, Field(alias="fullName")]
+    department_ids: Annotated[list[int], Field(default_factory=list, alias="departmentIds")]
 
 
 class ScheduleSnapshotItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    group_uuid: str = Field(alias="groupUuid")
-    subject_uuid: str = Field(alias="subjectUuid")
-    teacher_uuids: list[str] = Field(default_factory=list, alias="teacherUuids")
+    group_uuid: Annotated[str, Field(alias="groupUuid")]
+    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
+    teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="teacherUuids")]
     weekday: int
     slot: int
-    subject_type: str | None = Field(default=None, alias="subjectType")
+    subject_type: Annotated[str | None, Field(default=None, alias="subjectType")]
     location: str | None = None
     room: str | None = None
     link: str | None = None
-    start_date: str | None = Field(default=None, alias="startDate")
-    end_date: str | None = Field(default=None, alias="endDate")
+    start_date: Annotated[str | None, Field(default=None, alias="startDate")]
+    end_date: Annotated[str | None, Field(default=None, alias="endDate")]
 
     @field_validator("teacher_uuids")
     @classmethod
@@ -68,16 +69,16 @@ class ScheduleSnapshotBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str
-    semester_label: str = Field(alias="semesterLabel")
+    semester_label: Annotated[str, Field(alias="semesterLabel")]
     status: str = "draft"
-    source_type: str = Field(default="raspyx", alias="sourceType")
+    source_type: Annotated[str, Field(default="raspyx", alias="sourceType")]
     description: str | None = None
-    is_reference_for_retakes: bool = Field(default=False, alias="isReferenceForRetakes")
-    captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    is_reference_for_retakes: Annotated[bool, Field(default=False, alias="isReferenceForRetakes")]
+    captured_at: Annotated[datetime | None, Field(default=None, alias="capturedAt")]
     groups: list[ScheduleSnapshotGroup] = Field(default_factory=list)
     subjects: list[ScheduleSnapshotSubject] = Field(default_factory=list)
     teachers: list[ScheduleSnapshotTeacher] = Field(default_factory=list)
-    schedule_items: list[ScheduleSnapshotItem] = Field(default_factory=list, alias="scheduleItems")
+    schedule_items: Annotated[list[ScheduleSnapshotItem], Field(default_factory=list, alias="scheduleItems")]
 
 
 class ScheduleSnapshotCreate(ScheduleSnapshotBase):
@@ -89,25 +90,25 @@ class ScheduleSnapshotListRead(BaseModel):
 
     id: int
     name: str
-    semester_label: str = Field(alias="semesterLabel")
+    semester_label: Annotated[str, Field(alias="semesterLabel")]
     status: str
-    source_type: str = Field(alias="sourceType")
+    source_type: Annotated[str, Field(alias="sourceType")]
     description: str | None = None
-    is_reference_for_retakes: bool = Field(alias="isReferenceForRetakes")
-    captured_at: datetime | None = Field(default=None, alias="capturedAt")
-    created_at: datetime = Field(alias="createdAt")
-    group_count: int = Field(default=0, alias="groupCount")
-    subject_count: int = Field(default=0, alias="subjectCount")
-    teacher_count: int = Field(default=0, alias="teacherCount")
-    schedule_item_count: int = Field(default=0, alias="scheduleItemCount")
+    is_reference_for_retakes: Annotated[bool, Field(alias="isReferenceForRetakes")]
+    captured_at: Annotated[datetime | None, Field(default=None, alias="capturedAt")]
+    created_at: Annotated[datetime, Field(alias="createdAt")]
+    group_count: Annotated[int, Field(default=0, alias="groupCount")]
+    subject_count: Annotated[int, Field(default=0, alias="subjectCount")]
+    teacher_count: Annotated[int, Field(default=0, alias="teacherCount")]
+    schedule_item_count: Annotated[int, Field(default=0, alias="scheduleItemCount")]
 
 
 class ScheduleSnapshotRead(ScheduleSnapshotBase):
-    id: int
-    created_at: datetime = Field(alias="createdAt")
-    group_count: int = Field(default=0, alias="groupCount")
-    subject_count: int = Field(default=0, alias="subjectCount")
-    teacher_count: int = Field(default=0, alias="teacherCount")
-    schedule_item_count: int = Field(default=0, alias="scheduleItemCount")
-
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    created_at: Annotated[datetime, Field(alias="createdAt")]
+    group_count: Annotated[int, Field(default=0, alias="groupCount")]
+    subject_count: Annotated[int, Field(default=0, alias="subjectCount")]
+    teacher_count: Annotated[int, Field(default=0, alias="teacherCount")]
+    schedule_item_count: Annotated[int, Field(default=0, alias="scheduleItemCount")]

@@ -6,11 +6,41 @@ from sqlalchemy.orm import Session
 
 from app.models import Department, RetakeTeacher, TeacherLocal, User
 from app.schemas.teacher_directory import TeacherDirectoryCreate, TeacherDirectoryUpdate
+from app.services.raspyx_service import RaspyxService
 
 
 class TeacherDirectoryService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def sync_teachers(self) -> dict:  # <-- НОВЫЙ МЕТОД
+        raspyx = RaspyxService()
+        api_response = raspyx.get_teachers()
+
+        teachers_data = api_response.get("result", []) if isinstance(api_response, dict) else []
+        if not teachers_data:
+            return {"success": False, "message": "Внешнее API не вернуло список преподавателей."}
+
+        existing_teachers = self.db.scalars(select(TeacherLocal)).all()
+        existing_uuids = {t.uuid for t in existing_teachers}
+
+        added_count = 0
+        for t_data in teachers_data:
+            uuid_val = t_data.get("uuid")
+            full_name = t_data.get("full_name")
+
+            if uuid_val and full_name and uuid_val not in existing_uuids:
+                new_teacher = TeacherLocal(
+                    uuid=uuid_val,
+                    full_name=full_name,
+                    department_ids=[]
+                )
+                self.db.add(new_teacher)
+                existing_uuids.add(uuid_val)
+                added_count += 1
+
+        self.db.commit()
+        return {"success": True, "message": f"Добавлено новых преподавателей: {added_count}"}
 
     def list_teachers(self) -> list[TeacherLocal]:
         return list(self.db.scalars(select(TeacherLocal).order_by(TeacherLocal.full_name)).all())

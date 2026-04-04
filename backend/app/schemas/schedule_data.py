@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -19,6 +21,6 @@ class ScheduleDictionariesRead(BaseModel):
 class TeacherScheduleRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    teacher_uuid: str = Field(serialization_alias="teacherUuid")
-    teacher_full_name: str = Field(serialization_alias="teacherFullName")
+    teacher_uuid: Annotated[str, Field(serialization_alias="teacherUuid")]
+    teacher_full_name: Annotated[str, Field(serialization_alias="teacherFullName")]
     schedule: dict[str, object] = Field(default_factory=dict)
