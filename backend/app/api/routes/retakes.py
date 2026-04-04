@@ -12,6 +12,7 @@ from app.models import User
 from app.schemas.retake_admin import (
     PastSemesterImportRequest,
     PastSemesterImportResponse,
+    PastSemesterStatusResponse,
     RetakeResetResponse,
 )
 from app.schemas.retake import (
@@ -99,6 +100,14 @@ def import_past_semester(
         db: Session = Depends(get_db),
 ) -> PastSemesterImportResponse:
     return RetakeAdminService(db).import_past_semester(source_path=payload.source_path if payload else None)
+
+
+@router.get("/admin/past-semester/status", response_model=PastSemesterStatusResponse)
+def get_past_semester_status(
+        _: User = Depends(require_admin),
+        db: Session = Depends(get_db),
+) -> PastSemesterStatusResponse:
+    return RetakeAdminService(db).get_past_semester_status()
 
 
 @router.post("/admin/past-semester/import-json", response_model=PastSemesterImportResponse)

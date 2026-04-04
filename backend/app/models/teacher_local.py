@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Integer, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,5 +13,6 @@ class TeacherLocal(Base):
     uuid: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     department_ids: Mapped[list[int] | None] = mapped_column(ARRAY(Integer), default=list, nullable=True)
+    position_id: Mapped[int | None] = mapped_column(ForeignKey("positions.id"), nullable=True, index=True)
 
     retake_links: Mapped[list["RetakeTeacher"]] = relationship(back_populates="teacher")

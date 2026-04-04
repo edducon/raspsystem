@@ -1,42 +1,46 @@
 from datetime import datetime
-from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
 
 
 class ScheduleSnapshotGroup(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
     uuid: str
     number: str
     name: str | None = None
 
 
 class ScheduleSnapshotSubject(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
     uuid: str
     name: str
 
 
 class ScheduleSnapshotTeacher(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     uuid: str
-    full_name: Annotated[str, Field(alias="fullName")]
-    department_ids: Annotated[list[int], Field(default_factory=list, alias="departmentIds")]
+    full_name: str
+    department_ids: list[int] = Field(default_factory=list)
 
 
 class ScheduleSnapshotItem(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
-    group_uuid: Annotated[str, Field(alias="groupUuid")]
-    subject_uuid: Annotated[str, Field(alias="subjectUuid")]
-    teacher_uuids: Annotated[list[str], Field(default_factory=list, alias="teacherUuids")]
+    group_uuid: str
+    subject_uuid: str
+    teacher_uuids: list[str] = Field(default_factory=list)
     weekday: int
     slot: int
-    subject_type: Annotated[str | None, Field(default=None, alias="subjectType")]
+    subject_type: str | None = None
     location: str | None = None
     room: str | None = None
     link: str | None = None
-    start_date: Annotated[str | None, Field(default=None, alias="startDate")]
-    end_date: Annotated[str | None, Field(default=None, alias="endDate")]
+    start_date: str | None = None
+    end_date: str | None = None
 
     @field_validator("teacher_uuids")
     @classmethod
@@ -66,19 +70,19 @@ class ScheduleSnapshotItem(BaseModel):
 
 
 class ScheduleSnapshotBase(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     name: str
-    semester_label: Annotated[str, Field(alias="semesterLabel")]
+    semester_label: str
     status: str = "draft"
-    source_type: Annotated[str, Field(default="raspyx", alias="sourceType")]
+    source_type: str = "raspyx"
     description: str | None = None
-    is_reference_for_retakes: Annotated[bool, Field(default=False, alias="isReferenceForRetakes")]
-    captured_at: Annotated[datetime | None, Field(default=None, alias="capturedAt")]
+    is_reference_for_retakes: bool = False
+    captured_at: datetime | None = None
     groups: list[ScheduleSnapshotGroup] = Field(default_factory=list)
     subjects: list[ScheduleSnapshotSubject] = Field(default_factory=list)
     teachers: list[ScheduleSnapshotTeacher] = Field(default_factory=list)
-    schedule_items: Annotated[list[ScheduleSnapshotItem], Field(default_factory=list, alias="scheduleItems")]
+    schedule_items: list[ScheduleSnapshotItem] = Field(default_factory=list)
 
 
 class ScheduleSnapshotCreate(ScheduleSnapshotBase):
@@ -86,29 +90,31 @@ class ScheduleSnapshotCreate(ScheduleSnapshotBase):
 
 
 class ScheduleSnapshotListRead(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     id: int
     name: str
-    semester_label: Annotated[str, Field(alias="semesterLabel")]
+    semester_label: str
     status: str
-    source_type: Annotated[str, Field(alias="sourceType")]
+    source_type: str
     description: str | None = None
-    is_reference_for_retakes: Annotated[bool, Field(alias="isReferenceForRetakes")]
-    captured_at: Annotated[datetime | None, Field(default=None, alias="capturedAt")]
-    created_at: Annotated[datetime, Field(alias="createdAt")]
-    group_count: Annotated[int, Field(default=0, alias="groupCount")]
-    subject_count: Annotated[int, Field(default=0, alias="subjectCount")]
-    teacher_count: Annotated[int, Field(default=0, alias="teacherCount")]
-    schedule_item_count: Annotated[int, Field(default=0, alias="scheduleItemCount")]
+    is_reference_for_retakes: bool
+    captured_at: datetime | None = None
+    created_at: datetime
+    date_range_start: str | None = None
+    date_range_end: str | None = None
+    group_count: int = 0
+    subject_count: int = 0
+    teacher_count: int = 0
+    schedule_item_count: int = 0
 
 
 class ScheduleSnapshotRead(ScheduleSnapshotBase):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, alias_generator=to_camel)
 
     id: int
-    created_at: Annotated[datetime, Field(alias="createdAt")]
-    group_count: Annotated[int, Field(default=0, alias="groupCount")]
-    subject_count: Annotated[int, Field(default=0, alias="subjectCount")]
-    teacher_count: Annotated[int, Field(default=0, alias="teacherCount")]
-    schedule_item_count: Annotated[int, Field(default=0, alias="scheduleItemCount")]
+    created_at: datetime
+    group_count: int = 0
+    subject_count: int = 0
+    teacher_count: int = 0
+    schedule_item_count: int = 0

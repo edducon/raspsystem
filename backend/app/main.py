@@ -1,13 +1,20 @@
+import warnings
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic.warnings import UnsupportedFieldAttributeWarning
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.models  # noqa: F401
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.validation_errors import format_request_validation_error
+
+# FastAPI + Pydantic on Python 3.14 emits this warning while composing request/response models,
+# even though the generated OpenAPI/body schemas work correctly with our camelCase contract.
+warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.add_middleware(

@@ -26,7 +26,7 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
     id: retake.id,
     groupUuid: retake.groupUuid,
     groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
-    subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
+    subjectName: cleanSubjectName(retake.subjectName || apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
     date: retake.date,
     timeSlots: retake.timeSlots,
     room: retake.roomUuid,

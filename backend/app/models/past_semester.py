@@ -14,3 +14,5 @@ class PastSemester(Base):
     group_name: Mapped[str] = mapped_column(String(255), index=True)
     subject_name: Mapped[str] = mapped_column(Text)
     teacher_names: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    date_range_start: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    date_range_end: Mapped[str | None] = mapped_column(String(10), nullable=True)

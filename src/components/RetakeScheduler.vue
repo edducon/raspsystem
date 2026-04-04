@@ -2,11 +2,11 @@
 import { ref, watch, computed } from 'vue';
 import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
 import { addToast } from '../composables/useToast';
-import { fetchBackendFromBrowser } from '../lib/backend-api';
+import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
-type GroupRetake = { id: string; subjectUuid: string; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
+type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
 type RetakeFormContext = {
@@ -21,6 +21,35 @@ type RetakeFormContext = {
   availableChairmanUuids: string[];
   mainTeacherLacksDept: boolean;
 };
+
+function normalizeRetakeFormContext(raw: any): RetakeFormContext {
+  return {
+    groupHistory: (raw?.groupHistory ?? raw?.group_history ?? []).map((entry: any) => ({
+      subjectName: entry?.subjectName ?? entry?.subject_name ?? '',
+      teacherNames: entry?.teacherNames ?? entry?.teacher_names ?? [],
+    })),
+    existingRetakes: (raw?.existingRetakes ?? raw?.existing_retakes ?? []).map((retake: any) => ({
+      id: retake?.id ?? '',
+      subjectUuid: retake?.subjectUuid ?? retake?.subject_uuid ?? '',
+      subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
+      attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
+      date: retake?.date ?? '',
+      createdBy: retake?.createdBy ?? retake?.created_by ?? null,
+      canDelete: retake?.canDelete ?? retake?.can_delete ?? false,
+    })),
+    availableSubjects: (raw?.availableSubjects ?? raw?.available_subjects ?? []).map((subject: any) => ({
+      uuid: subject?.uuid ?? '',
+      name: subject?.name ?? '',
+    })),
+    subjectBlockedReason: raw?.subjectBlockedReason ?? raw?.subject_blocked_reason ?? null,
+    assignedAttempts: raw?.assignedAttempts ?? raw?.assigned_attempts ?? [],
+    nextAttemptNumber: raw?.nextAttemptNumber ?? raw?.next_attempt_number ?? 1,
+    availableMainTeacherUuids: raw?.availableMainTeacherUuids ?? raw?.available_main_teacher_uuids ?? [],
+    availableCommissionTeacherUuids: raw?.availableCommissionTeacherUuids ?? raw?.available_commission_teacher_uuids ?? [],
+    availableChairmanUuids: raw?.availableChairmanUuids ?? raw?.available_chairman_uuids ?? [],
+    mainTeacherLacksDept: raw?.mainTeacherLacksDept ?? raw?.main_teacher_lacks_dept ?? false,
+  };
+}
 
 const props = defineProps<{
   backendApiUrl: string;
@@ -46,7 +75,10 @@ const attemptNumber = ref(1);
 const groupSearchQuery = ref('');
 const selectedGroupUuid = ref('');
 const showGroupDropdown = ref(false);
-const formContext = ref<RetakeFormContext>({
+const showSubjectDropdown = ref(false);
+const subjectSearchQuery = ref('');
+
+const createEmptyFormContext = (): RetakeFormContext => ({
   groupHistory: [],
   existingRetakes: [],
   availableSubjects: [],
@@ -59,6 +91,13 @@ const formContext = ref<RetakeFormContext>({
   mainTeacherLacksDept: false,
 });
 
+const formContext = ref<RetakeFormContext>(createEmptyFormContext());
+const isLoadingFormContext = ref(false);
+const formContextError = ref<string | null>(null);
+const hasLoadedFormContext = ref(false);
+let formContextRequestId = 0;
+let suppressFormContextReload = false;
+
 const filteredGroups = computed(() => {
   if (!groupSearchQuery.value) return props.groups.slice(0, 50);
   const q = groupSearchQuery.value.toLowerCase();
@@ -69,6 +108,11 @@ const selectGroup = (group: { uuid: string; number: string }) => {
   selectedGroupUuid.value = group.uuid;
   groupSearchQuery.value = group.number;
   showGroupDropdown.value = false;
+};
+
+const selectSubject = (subject: RetakeSubjectOption) => {
+  selectedSubject.value = subject.uuid;
+  showSubjectDropdown.value = false;
 };
 
 const groupHistory = computed(() => formContext.value.groupHistory);
@@ -90,9 +134,26 @@ const availableSubjects = computed(() =>
     .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
 );
 
+const selectedSubjectOption = computed(() =>
+  availableSubjects.value.find((subject) => subject.uuid === selectedSubject.value) ?? null,
+);
+
+const filteredAvailableSubjects = computed(() => {
+  const query = subjectSearchQuery.value.toLowerCase().trim();
+  if (!query) return availableSubjects.value;
+  return availableSubjects.value.filter((subject) => subject.name.toLowerCase().includes(query));
+});
+
 const currentSubjectRetakes = computed(() => {
   if (!selectedSubject.value) return [];
-  return existingGroupRetakes.value.filter((retake) => retake.subjectUuid === selectedSubject.value);
+  const selectedName = selectedSubjectOption.value?.name ? cleanSubjectName(selectedSubjectOption.value.name).toLowerCase() : '';
+  if (!selectedName) {
+    return existingGroupRetakes.value.filter((retake) => retake.subjectUuid === selectedSubject.value);
+  }
+  return existingGroupRetakes.value.filter((retake) => {
+    const retakeName = retake.subjectName ? cleanSubjectName(retake.subjectName).toLowerCase() : '';
+    return retakeName ? retakeName === selectedName : retake.subjectUuid === selectedSubject.value;
+  });
 });
 
 const assignedAttempts = computed(() => formContext.value.assignedAttempts);
@@ -117,6 +178,7 @@ const commSearchQuery = ref('');
 watch(showMainDropdown, (value) => { if (!value) mainSearchQuery.value = ''; });
 watch(showChairmanDropdown, (value) => { if (!value) chairmanSearchQuery.value = ''; });
 watch(showCommDropdown, (value) => { if (!value) commSearchQuery.value = ''; });
+watch(showSubjectDropdown, (value) => { if (!value) subjectSearchQuery.value = ''; });
 
 const teachersByUuids = (uuids: string[]) => {
   const allowed = new Set(uuids);
@@ -173,19 +235,16 @@ const daySchedule = ref<MergedDaySchedule | null>(null);
 const currentGroup = computed(() => props.groups.find((item) => item.uuid === selectedGroupUuid.value) ?? null);
 
 const resetFormContext = () => {
-  formContext.value = {
-    groupHistory: [],
-    existingRetakes: [],
-    availableSubjects: [],
-    subjectBlockedReason: null,
-    assignedAttempts: [],
-    nextAttemptNumber: 1,
-    availableMainTeacherUuids: [],
-    availableCommissionTeacherUuids: [],
-    availableChairmanUuids: [],
-    mainTeacherLacksDept: false,
-  };
+  formContext.value = createEmptyFormContext();
 };
+
+const formContextErrorText = (error: unknown) => (
+  error instanceof BackendApiError
+    ? error.detail
+    : error instanceof Error
+      ? error.message
+      : 'Не удалось загрузить данные для формы пересдачи.'
+);
 
 const normalizeSelectedTeacherState = (context: RetakeFormContext) => {
   const allowedMain = new Set(context.availableMainTeacherUuids);
@@ -213,11 +272,18 @@ const normalizeSelectedTeacherState = (context: RetakeFormContext) => {
 const loadFormContext = async () => {
   if (!currentGroup.value) {
     resetFormContext();
+    formContextError.value = null;
+    hasLoadedFormContext.value = false;
+    isLoadingFormContext.value = false;
     return;
   }
 
+  const requestId = ++formContextRequestId;
+  isLoadingFormContext.value = true;
+  formContextError.value = null;
+
   try {
-    const nextContext = await fetchBackendFromBrowser<RetakeFormContext>(
+    const rawContext = await fetchBackendFromBrowser<any>(
       props.backendApiUrl,
       '/retakes/form-context',
       {
@@ -233,7 +299,14 @@ const loadFormContext = async () => {
       },
     );
 
+    if (requestId !== formContextRequestId) {
+      return;
+    }
+
+    const nextContext = normalizeRetakeFormContext(rawContext);
+
     formContext.value = nextContext;
+    hasLoadedFormContext.value = true;
 
     if (!selectedSubject.value && nextContext.availableSubjects.length > 0) {
       return;
@@ -248,23 +321,51 @@ const loadFormContext = async () => {
       attemptNumber.value = nextContext.nextAttemptNumber;
     }
   } catch (error) {
-    resetFormContext();
-    addToast(error instanceof Error ? error.message : 'Не удалось загрузить данные для формы пересдачи.', 'error');
+    if (requestId !== formContextRequestId) {
+      return;
+    }
+
+    formContextError.value = formContextErrorText(error);
+    hasLoadedFormContext.value = false;
+    addToast(formContextError.value, 'error');
+  } finally {
+    if (requestId === formContextRequestId) {
+      isLoadingFormContext.value = false;
+    }
   }
 };
 
 watch(selectedGroupUuid, async (newUuid, oldUuid) => {
-  if (newUuid !== oldUuid) {
-    selectedSubject.value = '';
-    mainTeachers.value = [];
-    commissionTeachers.value = [];
-    chairmanTeacher.value = null;
-    selectedSlots.value = [];
-    daySchedule.value = null;
+  if (!newUuid) {
+    showSubjectDropdown.value = false;
     resetFormContext();
+    formContextError.value = null;
+    hasLoadedFormContext.value = false;
+    isLoadingFormContext.value = false;
+    return;
   }
-  if (!newUuid) return;
-  await loadFormContext();
+
+  if (newUuid === oldUuid) {
+    return;
+  }
+
+  suppressFormContextReload = true;
+  showSubjectDropdown.value = false;
+  selectedSubject.value = '';
+  mainTeachers.value = [];
+  commissionTeachers.value = [];
+  chairmanTeacher.value = null;
+  selectedSlots.value = [];
+  daySchedule.value = null;
+  resetFormContext();
+  formContextError.value = null;
+  hasLoadedFormContext.value = false;
+
+  try {
+    await loadFormContext();
+  } finally {
+    suppressFormContextReload = false;
+  }
 });
 
 watch(
@@ -275,7 +376,7 @@ watch(
     chairmanTeacher,
   ],
   async () => {
-    if (!selectedGroupUuid.value) return;
+    if (suppressFormContextReload || !selectedGroupUuid.value) return;
     await loadFormContext();
   },
 );
@@ -454,23 +555,73 @@ const deleteRetake = async (id: string) => {
         </div>
 
         <!-- Subject -->
-        <div>
+        <div class="relative">
           <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
             Дисциплина
           </label>
 
-          <select
-              v-model="selectedSubject"
-              :disabled="!selectedGroupUuid || availableSubjects.length === 0"
-              class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none disabled:opacity-50 transition-all"
+          <button
+              type="button"
+              :disabled="!selectedGroupUuid || isLoadingFormContext"
+              @click="(!selectedGroupUuid || isLoadingFormContext) ? null : showSubjectDropdown = !showSubjectDropdown"
+              class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none disabled:opacity-50 transition-all flex items-center justify-between gap-3 text-left"
           >
-            <option value="" disabled>
-              {{ availableSubjects.length === 0 ? 'Сначала выберите группу' : 'Выберите предмет...' }}
-            </option>
-            <option v-for="s in availableSubjects" :key="s.uuid" :value="s.uuid">
-              {{ s.name }}
-            </option>
-          </select>
+            <span
+                class="truncate"
+                :class="selectedSubjectOption ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'"
+            >
+              {{
+                selectedSubjectOption?.name
+                  ?? (isLoadingFormContext
+                    ? 'Загружаем дисциплины...'
+                    : (!selectedGroupUuid ? 'Сначала выберите группу' : 'Выберите дисциплину'))
+              }}
+            </span>
+            <div class="flex items-center gap-2 shrink-0">
+              <div
+                  v-if="isLoadingFormContext"
+                  class="w-4 h-4 rounded-full border-2 border-red-500 border-t-transparent animate-spin"
+              ></div>
+              <ChevronDown class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="showSubjectDropdown ? 'rotate-180' : ''" />
+            </div>
+          </button>
+
+          <div
+              v-if="showSubjectDropdown"
+              class="absolute z-20 w-full mt-2 max-h-72 flex flex-col bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)] overflow-hidden"
+          >
+            <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
+              <div class="relative">
+                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                    v-model="subjectSearchQuery"
+                    type="text"
+                    @click.stop
+                    placeholder="Поиск дисциплины..."
+                    class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-red-400 dark:text-white transition-colors"
+                />
+              </div>
+            </div>
+
+            <div class="overflow-y-auto flex-1">
+              <button
+                  v-for="subject in filteredAvailableSubjects"
+                  :key="subject.uuid"
+                  type="button"
+                  @click="selectSubject(subject)"
+                  class="w-full px-4 py-3 text-left hover:bg-red-50 dark:hover:bg-white/[0.04] transition-colors flex items-center justify-between gap-3"
+              >
+                <span class="text-sm text-slate-700 dark:text-slate-200">{{ subject.name }}</span>
+                <CheckCircle v-if="selectedSubject === subject.uuid" class="w-4 h-4 text-red-500 shrink-0" />
+              </button>
+
+              <div v-if="filteredAvailableSubjects.length === 0" class="p-4 text-sm text-slate-400 text-center">
+                {{ isLoadingFormContext ? 'Загружаем дисциплины...' : 'По вашему запросу ничего не найдено.' }}
+              </div>
+            </div>
+          </div>
+
+          <div v-if="showSubjectDropdown" @click="showSubjectDropdown = false" class="fixed inset-0 z-10"></div>
 
           <p
               v-if="subjectBelongsToAnotherDept"
@@ -480,11 +631,27 @@ const deleteRetake = async (id: string) => {
             {{ formContext.subjectBlockedReason }}
           </p>
           <p
-              v-else-if="selectedGroupUuid && availableSubjects.length === 0"
+              v-else-if="selectedGroupUuid && isLoadingFormContext"
+              class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 flex items-start gap-1.5"
+          >
+            <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            Загружаем дисциплины и историю группы...
+          </p>
+          <p
+              v-else-if="formContextError"
+              class="text-xs text-red-500 dark:text-red-400 font-medium mt-2 flex items-start gap-1.5"
+          >
+            <AlertTriangle class="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            {{ formContextError }}
+          </p>
+          <p
+              v-else-if="selectedGroupUuid && hasLoadedFormContext && availableSubjects.length === 0"
               class="text-xs text-amber-600 dark:text-amber-300 font-medium mt-2 flex items-start gap-1.5"
           >
             <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Для группы не найдены дисциплины. Проверьте import прошлого семестра или reference snapshot.
+            {{ groupHistory.length === 0
+              ? 'Для выбранной группы нет данных прошлого семестра. Загрузите schedules.json или проверьте локальный архив прошлого семестра.'
+              : 'Для выбранной группы есть данные прошлого семестра, но дисциплины не удалось сопоставить с доступными сущностями. Список должен строиться из прошлого семестра, поэтому проверьте сопоставление дисциплин без подмены источника на live API.' }}
           </p>
         </div>
 

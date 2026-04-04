@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Department, RetakeTeacher, TeacherLocal, User
+from app.models import Department, Position, RetakeTeacher, TeacherLocal, User
 from app.schemas.teacher_directory import TeacherDirectoryCreate, TeacherDirectoryUpdate
 from app.services.raspyx_service import RaspyxService
 
@@ -33,7 +33,8 @@ class TeacherDirectoryService:
                 new_teacher = TeacherLocal(
                     uuid=uuid_val,
                     full_name=full_name,
-                    department_ids=[]
+                    department_ids=[],
+                    position_id=None,
                 )
                 self.db.add(new_teacher)
                 existing_uuids.add(uuid_val)
@@ -56,6 +57,7 @@ class TeacherDirectoryService:
 
     def create_teacher(self, data: TeacherDirectoryCreate) -> TeacherLocal:
         department_ids = self._validate_departments(data.department_ids)
+        position_id = self._validate_position(data.position_id)
         teacher_uuid = str(data.uuid or uuid4())
         if self.db.get(TeacherLocal, teacher_uuid) is not None:
             raise HTTPException(
@@ -67,6 +69,7 @@ class TeacherDirectoryService:
             uuid=teacher_uuid,
             full_name=data.full_name,
             department_ids=department_ids,
+            position_id=position_id,
         )
         self.db.add(teacher)
         self.db.commit()
@@ -77,6 +80,7 @@ class TeacherDirectoryService:
         teacher = self.get_teacher(teacher_uuid)
         teacher.full_name = data.full_name
         teacher.department_ids = self._validate_departments(data.department_ids)
+        teacher.position_id = self._validate_position(data.position_id)
         self.db.commit()
         self.db.refresh(teacher)
         return teacher
@@ -114,3 +118,14 @@ class TeacherDirectoryService:
                 detail=f"Не найдены кафедры: {', '.join(str(value) for value in missing_ids)}.",
             )
         return normalized
+
+    def _validate_position(self, position_id: int | None) -> int | None:
+        if position_id is None:
+            return None
+
+        if self.db.get(Position, position_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Должность не найдена.",
+            )
+        return position_id

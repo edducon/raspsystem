@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import HTTPException, status
@@ -10,9 +11,41 @@ from sqlalchemy.orm import Session
 from app.models import PastSemester, Retake, RetakeTeacher
 
 
+DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATE_HINT_KEYS = {"date", "start_date", "end_date", "startDate", "endDate"}
+
+
 class RetakeAdminService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def get_past_semester_status(self) -> dict:
+        imported_records = int(self.db.scalar(select(func.count()).select_from(PastSemester)) or 0)
+        unique_groups = int(self.db.scalar(select(func.count(func.distinct(PastSemester.group_name)))) or 0)
+        unique_subjects = int(self.db.scalar(select(func.count(func.distinct(PastSemester.subject_name)))) or 0)
+
+        date_bounds_row = self.db.execute(
+            select(
+                func.max(PastSemester.date_range_start),
+                func.max(PastSemester.date_range_end),
+            )
+        ).one()
+        date_range_start = date_bounds_row[0]
+        date_range_end = date_bounds_row[1]
+
+        if imported_records > 0 and (not date_range_start or not date_range_end):
+            fallback_start, fallback_end = self._load_default_schedule_date_bounds()
+            date_range_start = date_range_start or fallback_start
+            date_range_end = date_range_end or fallback_end
+
+        return {
+            "is_loaded": imported_records > 0,
+            "imported_records": imported_records,
+            "unique_groups": unique_groups,
+            "unique_subjects": unique_subjects,
+            "date_range_start": date_range_start,
+            "date_range_end": date_range_end,
+        }
 
     def import_past_semester(self, source_path: str | None = None) -> dict:
         file_path = self._resolve_source_path(source_path)
@@ -20,7 +53,6 @@ class RetakeAdminService:
         return self._do_import(payload, source_label=str(file_path))
 
     def import_past_semester_json(self, payload: dict) -> dict:
-        """Import past semester data from a JSON payload sent directly from the frontend."""
         return self._do_import(payload, source_label="browser-upload")
 
     def _do_import(self, payload: dict, source_label: str) -> dict:
@@ -31,7 +63,9 @@ class RetakeAdminService:
                 detail='Файл имеет некорректный формат. Ожидается {"status": "OK", "response": {...}}.',
             )
 
+        date_range_start, date_range_end = self._extract_date_bounds(payload)
         records_map: dict[tuple[str, str], set[str]] = {}
+
         for day_schedule in raw_schedule.values():
             if not isinstance(day_schedule, dict):
                 continue
@@ -63,6 +97,8 @@ class RetakeAdminService:
                 group_name=group_name,
                 subject_name=subject_name,
                 teacher_names=sorted(teacher_names),
+                date_range_start=date_range_start,
+                date_range_end=date_range_end,
             )
             for (group_name, subject_name), teacher_names in sorted(records_map.items())
         ]
@@ -78,6 +114,8 @@ class RetakeAdminService:
             "imported_records": len(rows),
             "unique_groups": len({row.group_name for row in rows}),
             "unique_subjects": len({row.subject_name for row in rows}),
+            "date_range_start": date_range_start,
+            "date_range_end": date_range_end,
             "message": f"Импортировано записей за прошлый семестр: {len(rows)}.",
         }
 
@@ -114,7 +152,7 @@ class RetakeAdminService:
                     Path.cwd() / "schedules.json",
                     repo_root / "schedules.json",
                     repo_root / "backend" / "schedules.json",
-                    ]
+                ]
             )
 
         checked_paths: list[str] = []
@@ -142,3 +180,43 @@ class RetakeAdminService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Некорректный JSON: {exc}.",
             ) from exc
+
+    def _load_default_schedule_date_bounds(self) -> tuple[str | None, str | None]:
+        try:
+            file_path = self._resolve_source_path(None)
+            payload = self._load_payload(file_path)
+        except HTTPException:
+            return None, None
+        return self._extract_date_bounds(payload)
+
+    def _extract_date_bounds(self, payload: object) -> tuple[str | None, str | None]:
+        collected: set[str] = set()
+        self._collect_dates(payload, collected)
+        if not collected:
+            return None, None
+        ordered = sorted(collected)
+        return ordered[0], ordered[-1]
+
+    def _collect_dates(self, value: object, sink: set[str]) -> None:
+        if isinstance(value, str):
+            if DATE_VALUE_RE.fullmatch(value.strip()):
+                sink.add(value.strip())
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                self._collect_dates(item, sink)
+            return
+
+        if not isinstance(value, dict):
+            return
+
+        for key, nested_value in value.items():
+            key_str = str(key).strip()
+            if DATE_VALUE_RE.fullmatch(key_str):
+                sink.add(key_str)
+
+            if key_str in DATE_HINT_KEYS and isinstance(nested_value, str) and DATE_VALUE_RE.fullmatch(nested_value.strip()):
+                sink.add(nested_value.strip())
+
+            self._collect_dates(nested_value, sink)

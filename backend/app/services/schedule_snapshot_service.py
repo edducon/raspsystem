@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -12,6 +13,9 @@ from app.schemas.schedule_snapshot import (
     ScheduleSnapshotListRead,
     ScheduleSnapshotRead,
 )
+
+
+DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ScheduleSnapshotService:
@@ -181,6 +185,7 @@ class ScheduleSnapshotService:
         return result
 
     def _serialize_summary(self, snapshot: ScheduleSnapshot) -> ScheduleSnapshotListRead:
+        date_range_start, date_range_end = self._extract_date_bounds(snapshot.schedule_items or [])
         return ScheduleSnapshotListRead.model_validate(
             {
                 "id": snapshot.id,
@@ -192,6 +197,8 @@ class ScheduleSnapshotService:
                 "is_reference_for_retakes": snapshot.is_reference_for_retakes,
                 "captured_at": snapshot.captured_at,
                 "created_at": snapshot.created_at,
+                "date_range_start": date_range_start,
+                "date_range_end": date_range_end,
                 "group_count": len(snapshot.groups or []),
                 "subject_count": len(snapshot.subjects or []),
                 "teacher_count": len(snapshot.teachers or []),
@@ -221,3 +228,36 @@ class ScheduleSnapshotService:
                 "schedule_item_count": len(snapshot.schedule_items or []),
             }
         )
+
+    def _extract_date_bounds(self, schedule_items: list[dict]) -> tuple[str | None, str | None]:
+        dates = sorted(self._collect_date_values(schedule_items))
+        if not dates:
+            return None, None
+        return dates[0], dates[-1]
+
+    def _collect_date_values(self, value: object) -> set[str]:
+        result: set[str] = set()
+
+        def visit(node: object) -> None:
+            if isinstance(node, str):
+                normalized = node.strip()
+                if DATE_VALUE_RE.fullmatch(normalized):
+                    result.add(normalized)
+                return
+
+            if isinstance(node, list):
+                for item in node:
+                    visit(item)
+                return
+
+            if not isinstance(node, dict):
+                return
+
+            for key, nested in node.items():
+                key_str = str(key).strip()
+                if DATE_VALUE_RE.fullmatch(key_str):
+                    result.add(key_str)
+                visit(nested)
+
+        visit(value)
+        return result

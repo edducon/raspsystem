@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import socket
 from urllib import error, parse, request
@@ -11,6 +12,8 @@ from app.core.config import settings
 class RaspyxService:
     _cached_access_token: str | None = None
     _response_cache: dict[str, tuple[float, object]] = {}
+    _endpoint_locks: dict[str, threading.Lock] = {}
+    _endpoint_locks_guard = threading.Lock()
     _cache_ttl_seconds = 30 * 60
 
     def _load_json(self, url: str, *, method: str = "GET", payload: dict | None = None, retry_count: int = 1) -> object:
@@ -45,9 +48,25 @@ class RaspyxService:
         if cached is not None and cached[0] > now:
             return cached[1]
 
-        payload = self._load_json(f"{settings.raspyx_api_base_url}{endpoint}")
-        self.__class__._response_cache[endpoint] = (now + self._cache_ttl_seconds, payload)
-        return payload
+        endpoint_lock = self._endpoint_lock(endpoint)
+        with endpoint_lock:
+            cached = self.__class__._response_cache.get(endpoint)
+            now = time.time()
+            if cached is not None and cached[0] > now:
+                return cached[1]
+
+            payload = self._load_json(f"{settings.raspyx_api_base_url}{endpoint}")
+            self.__class__._response_cache[endpoint] = (now + self._cache_ttl_seconds, payload)
+            return payload
+
+    @classmethod
+    def _endpoint_lock(cls, endpoint: str) -> threading.Lock:
+        with cls._endpoint_locks_guard:
+            lock = cls._endpoint_locks.get(endpoint)
+            if lock is None:
+                lock = threading.Lock()
+                cls._endpoint_locks[endpoint] = lock
+            return lock
 
     def get_access_token(self) -> str:
         if self.__class__._cached_access_token is not None:

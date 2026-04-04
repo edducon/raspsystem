@@ -17,6 +17,8 @@ class PastSemesterImportResponse(BaseModel):
     imported_records: Annotated[int, Field(serialization_alias="importedRecords")]
     unique_groups: Annotated[int, Field(serialization_alias="uniqueGroups")]
     unique_subjects: Annotated[int, Field(serialization_alias="uniqueSubjects")]
+    date_range_start: Annotated[str | None, Field(default=None, serialization_alias="dateRangeStart")]
+    date_range_end: Annotated[str | None, Field(default=None, serialization_alias="dateRangeEnd")]
     message: str
 
 
@@ -27,3 +29,14 @@ class RetakeResetResponse(BaseModel):
     deleted_retakes: Annotated[int, Field(serialization_alias="deletedRetakes")]
     deleted_teacher_links: Annotated[int, Field(serialization_alias="deletedTeacherLinks")]
     message: str
+
+
+class PastSemesterStatusResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    is_loaded: Annotated[bool, Field(serialization_alias="isLoaded")]
+    imported_records: Annotated[int, Field(serialization_alias="importedRecords")]
+    unique_groups: Annotated[int, Field(serialization_alias="uniqueGroups")]
+    unique_subjects: Annotated[int, Field(serialization_alias="uniqueSubjects")]
+    date_range_start: Annotated[str | None, Field(default=None, serialization_alias="dateRangeStart")]
+    date_range_end: Annotated[str | None, Field(default=None, serialization_alias="dateRangeEnd")]

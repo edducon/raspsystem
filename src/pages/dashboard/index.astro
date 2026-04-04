@@ -61,7 +61,7 @@ if (hasOwnSchedule) {
         teacherRetakesFormatted = myRetakes.map((retake: any) => ({
             ...retake,
             groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
-            subjectName: cleanSubjectName(apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
+            subjectName: cleanSubjectName(retake.subjectName || apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
         }));
     } catch (error) {
         console.error('Failed to load teacher retakes', error);
