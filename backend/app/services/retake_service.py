@@ -52,44 +52,61 @@ class RetakeService:
         return self._serialize_history_rows(rows)
 
     def get_form_context(self, payload: RetakeFormContextRequest, user: User) -> dict:
-        history_rows = self._load_group_history_rows(payload.group_number)
-        group_history = self._serialize_history_rows(history_rows)
-        existing_retakes = self.list_group_retakes(group_uuid=payload.group_uuid, viewer=user)
-        available_subjects = self._build_available_subjects(
-            history_rows=history_rows,
-            group_uuid=payload.group_uuid,
-            group_number=payload.group_number,
-        )
-        subject_blocked_reason = self._get_subject_access_error(
-            user=user,
-            group_number=payload.group_number,
-            subject_uuid=payload.subject_uuid,
-        )
-        selected_subject_name = self._resolve_subject_name(payload.subject_uuid) if payload.subject_uuid else None
-        assigned_attempts = sorted(
-            {
-                int(retake["attempt_number"])
-                for retake in existing_retakes
-                if selected_subject_name
-                and normalize_for_compare(str(retake.get("subject_name") or "")) == normalize_for_compare(selected_subject_name)
-            }
-        )
-        next_attempt_number = next((value for value in (1, 2, 3) if value not in assigned_attempts), 3)
+        include_group_data = payload.include_group_data
+        include_subject_data = payload.include_subject_data
+        include_teacher_data = payload.include_teacher_data
 
-        available_main_teacher_uuids: list[str] = []
-        if payload.subject_uuid and subject_blocked_reason is None:
-            available_main_teacher_uuids = self._available_main_teacher_uuids(
-                user=user,
+        history_rows: list[PastSemester] = []
+        if include_group_data or include_subject_data:
+            history_rows = self._load_group_history_rows(payload.group_number)
+
+        group_history: list[dict] = []
+        available_subjects: list[dict] = []
+        if include_group_data:
+            group_history = self._serialize_history_rows(history_rows)
+            available_subjects = self._build_available_subjects(
                 history_rows=history_rows,
-                group_number=payload.group_number,
                 group_uuid=payload.group_uuid,
+                group_number=payload.group_number,
+            )
+
+        existing_retakes: list[dict] = []
+        if include_group_data or (include_subject_data and payload.subject_uuid):
+            existing_retakes = self.list_group_retakes(group_uuid=payload.group_uuid, viewer=user)
+
+        subject_blocked_reason = None
+        assigned_attempts: list[int] = []
+        next_attempt_number = 1
+        available_main_teacher_uuids: list[str] = []
+        if include_subject_data and payload.subject_uuid:
+            subject_blocked_reason = self._get_subject_access_error(
+                user=user,
+                group_number=payload.group_number,
                 subject_uuid=payload.subject_uuid,
             )
+            selected_subject_name = self._resolve_subject_name(payload.subject_uuid)
+            assigned_attempts = sorted(
+                {
+                    int(retake["attempt_number"])
+                    for retake in existing_retakes
+                    if normalize_for_compare(str(retake.get("subject_name") or "")) == normalize_for_compare(selected_subject_name)
+                }
+            )
+            next_attempt_number = next((value for value in (1, 2, 3) if value not in assigned_attempts), 3)
+
+            if subject_blocked_reason is None:
+                available_main_teacher_uuids = self._available_main_teacher_uuids(
+                    user=user,
+                    history_rows=history_rows,
+                    group_number=payload.group_number,
+                    group_uuid=payload.group_uuid,
+                    subject_uuid=payload.subject_uuid,
+                )
 
         main_teacher_lacks_dept = False
         available_commission_teacher_uuids: list[str] = []
         available_chairman_uuids: list[str] = []
-        if payload.main_teacher_uuids:
+        if include_teacher_data and payload.main_teacher_uuids:
             commission_context = self._build_commission_context(
                 main_teacher_uuids=payload.main_teacher_uuids,
                 commission_teacher_uuids=payload.commission_teacher_uuids,
@@ -410,6 +427,10 @@ class RetakeService:
         if reference_name:
             return reference_name
 
+        history_name = self._find_history_subject_name(subject_uuid)
+        if history_name:
+            return history_name
+
         for subject in self._list_schedule_subjects():
             if str(subject.get("uuid") or "") == subject_uuid:
                 return str(subject.get("name") or "")
@@ -643,10 +664,6 @@ class RetakeService:
             if snapshot_teacher_names:
                 teacher_name_sources.append(snapshot_teacher_names)
 
-        live_teacher_names = self._get_live_group_subject_teacher_names(group_number=group_number, subject_name=subject_name)
-        if live_teacher_names:
-            teacher_name_sources.append(live_teacher_names)
-
         teachers: list[TeacherLocal] = []
         for teacher_names in teacher_name_sources:
             teachers = self._load_teachers_by_names(teacher_names)
@@ -799,22 +816,10 @@ class RetakeService:
             return []
 
         history_subjects = self._dedupe_history_subjects(history_rows)
-        current_subjects = self._list_group_current_subjects(group_uuid=group_uuid, group_number=group_number)
-        if not current_subjects:
-            current_subjects = self._list_schedule_subjects()
-        matched_subjects = self._match_subject_options_by_names(
-            current_subjects=current_subjects,
-            names=[subject_name for subject_name, _ in history_subjects],
-        )
-        matched_by_name = {
-            normalize_for_compare(str(subject.get("name") or "")): str(subject.get("uuid") or "")
-            for subject in matched_subjects
-            if subject.get("uuid") and subject.get("name")
-        }
 
         return [
             {
-                "uuid": matched_by_name.get(normalized_name) or self._history_subject_uuid(subject_name),
+                "uuid": self._history_subject_uuid(subject_name),
                 "name": subject_name,
             }
             for subject_name, normalized_name in history_subjects
@@ -850,6 +855,10 @@ class RetakeService:
         reference_name = self.reference_schedule.find_subject_name(subject_uuid)
         if reference_name:
             return reference_name
+
+        history_name = self._find_history_subject_name(subject_uuid)
+        if history_name:
+            return history_name
 
         for subject in self._list_schedule_subjects():
             if str(subject.get("uuid") or "") == subject_uuid:

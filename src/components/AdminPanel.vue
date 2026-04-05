@@ -47,6 +47,7 @@ const busy = reactive({
   position: false,
   syncTeachers: false,
   importPastSemester: false,
+  importCurrentSemesterAsPast: false,
   createAccount: '' as string,
   updateTeacherPosition: '' as string,
 });
@@ -109,8 +110,6 @@ const getPositionName = (id: number | null) => {
 
 const getAccountForTeacherUuid = (uuid: string) => users.value.find(u => u.teacherUuid === uuid);
 
-const normalizeDepartmentIds = (ids: string[]) => [...new Set(ids)].sort((a, b) => Number(a) - Number(b));
-
 function resetTeacherInlineForm() {
   teacherInlineForm.uuid = '';
   teacherInlineForm.fullName = '';
@@ -130,8 +129,20 @@ function toggleDepartmentSelection(target: string[], departmentId: number) {
   else target.push(normalizedId);
 }
 
-function toggleTeacherInlineDepartment(departmentId: number) {
-  toggleDepartmentSelection(teacherInlineForm.department_ids, departmentId);
+function syncTeacherInlineState(teacher: TeacherDirectoryItem) {
+  teacherInlineForm.uuid = teacher.uuid;
+  teacherInlineForm.fullName = teacher.fullName;
+  teacherInlineForm.department_ids = teacher.departmentIds.map(String);
+  teacherInlineForm.position_id = teacher.positionId ? String(teacher.positionId) : '';
+  teacherInlineOriginal.uuid = teacher.uuid;
+  teacherInlineOriginal.department_ids = teacher.departmentIds.map(String);
+  teacherInlineOriginal.position_id = teacher.positionId ? String(teacher.positionId) : '';
+}
+
+function updateTeacherDirectoryItem(updatedTeacher: TeacherDirectoryItem) {
+  teacherDirectory.value = teacherDirectory.value.map((teacher) => (
+    teacher.uuid === updatedTeacher.uuid ? updatedTeacher : teacher
+  ));
 }
 
 function toggleTeacherFlowDepartment(departmentId: number) {
@@ -155,13 +166,7 @@ function activateTeacherInline(teacher: TeacherDirectoryItem) {
     return;
   }
 
-  teacherInlineForm.uuid = teacher.uuid;
-  teacherInlineForm.fullName = teacher.fullName;
-  teacherInlineForm.department_ids = teacher.departmentIds.map(String);
-  teacherInlineForm.position_id = teacher.positionId ? String(teacher.positionId) : '';
-  teacherInlineOriginal.uuid = teacher.uuid;
-  teacherInlineOriginal.department_ids = teacher.departmentIds.map(String);
-  teacherInlineOriginal.position_id = teacher.positionId ? String(teacher.positionId) : '';
+  syncTeacherInlineState(teacher);
 }
 
 function toggleTeacherDepartmentMenu(teacher: TeacherDirectoryItem) {
@@ -183,21 +188,6 @@ function toggleTeacherPositionMenu(teacher: TeacherDirectoryItem) {
 function closeTeacherInlineMenus() {
   teacherDepartmentMenuUuid.value = '';
   teacherPositionMenuUuid.value = '';
-}
-
-function cancelTeacherInlineEdit() {
-  resetTeacherInlineForm();
-}
-
-function hasTeacherInlineChanges(uuid: string) {
-  if (teacherInlineForm.uuid !== uuid || teacherInlineOriginal.uuid !== uuid) {
-    return false;
-  }
-
-  const currentDepartmentIds = normalizeDepartmentIds(teacherInlineForm.department_ids);
-  const originalDepartmentIds = normalizeDepartmentIds(teacherInlineOriginal.department_ids);
-  return currentDepartmentIds.join(',') !== originalDepartmentIds.join(',')
-    || teacherInlineForm.position_id !== teacherInlineOriginal.position_id;
 }
 
 function getTeacherDepartmentsForDisplay(teacher: TeacherDirectoryItem) {
@@ -356,7 +346,7 @@ async function saveTeacherSettings() {
   if (!teacherInlineForm.uuid) return;
   busy.updateTeacherPosition = teacherInlineForm.uuid;
   try {
-    await fetchBackendFromBrowser(props.backendApiUrl, `/teacher-directory/${teacherInlineForm.uuid}`, {
+    const updatedTeacher = await fetchBackendFromBrowser<TeacherDirectoryItem>(props.backendApiUrl, `/teacher-directory/${teacherInlineForm.uuid}`, {
       method: 'PUT',
       body: JSON.stringify({
         full_name: teacherInlineForm.fullName,
@@ -364,14 +354,33 @@ async function saveTeacherSettings() {
         position_id: teacherInlineForm.position_id ? Number(teacherInlineForm.position_id) : null,
       }),
     });
-    setStatus('success', `Настройки преподавателя обновлены: ${teacherInlineForm.fullName}.`);
-    resetTeacherInlineForm();
-    await reloadAll();
+    updateTeacherDirectoryItem(updatedTeacher);
+    syncTeacherInlineState(updatedTeacher);
+    setStatus('success', `Настройки преподавателя обновлены: ${updatedTeacher.fullName}.`);
   } catch (error) {
+    const currentTeacher = teacherDirectory.value.find((teacher) => teacher.uuid === teacherInlineForm.uuid);
+    if (currentTeacher) {
+      syncTeacherInlineState(currentTeacher);
+    }
     setStatus('error', errorText(error, 'Не удалось обновить настройки преподавателя.'));
   } finally {
     busy.updateTeacherPosition = '';
   }
+}
+
+async function toggleTeacherInlineDepartment(teacher: TeacherDirectoryItem, departmentId: number) {
+  if (busy.updateTeacherPosition === teacher.uuid) return;
+  activateTeacherInline(teacher);
+  toggleDepartmentSelection(teacherInlineForm.department_ids, departmentId);
+  await saveTeacherSettings();
+}
+
+async function setTeacherInlinePosition(teacher: TeacherDirectoryItem, positionId: string) {
+  if (busy.updateTeacherPosition === teacher.uuid) return;
+  activateTeacherInline(teacher);
+  teacherInlineForm.position_id = positionId;
+  await saveTeacherSettings();
+  closeTeacherInlineMenus();
 }
 
 async function createAccountForTeacher() {
@@ -434,6 +443,33 @@ async function handlePastSemesterFile(event: Event) {
     await loadPastSemesterStatus(true);
   } catch (error) { setStatus('error', errorText(error, 'Ошибка импорта.')); }
   finally { busy.importPastSemester = false; input.value = ''; }
+}
+
+async function importCurrentSemesterAsPast() {
+  if (!window.confirm('Это действие заменит локальные данные прошлого семестра тестовым импортом из текущего API 2.0.0. Продолжить?')) {
+    return;
+  }
+
+  busy.importCurrentSemesterAsPast = true;
+  try {
+    const result = await fetchBackendFromBrowser<any>(props.backendApiUrl, '/retakes/admin/past-semester/import-current', {
+      method: 'POST',
+    });
+
+    pastSemesterInfo.value = {
+      imported: result.importedRecords ?? result.imported_records ?? 0,
+      groups: result.uniqueGroups ?? result.unique_groups ?? 0,
+      subjects: result.uniqueSubjects ?? result.unique_subjects ?? 0,
+      dateRangeStart: result.dateRangeStart ?? result.date_range_start ?? null,
+      dateRangeEnd: result.dateRangeEnd ?? result.date_range_end ?? null,
+    };
+    setStatus('success', result.message || 'Текущий семестр сохранён как прошлый.');
+    await loadPastSemesterStatus(true);
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось сохранить текущий семестр как прошлый.'));
+  } finally {
+    busy.importCurrentSemesterAsPast = false;
+  }
 }
 
 const archiveItems = computed<ArchiveItem[]>(() => {
@@ -571,7 +607,7 @@ onMounted(() => {
                 <div>
                   <div>{{ t.fullName }}</div>
                   <div class="text-[11px] font-medium text-slate-400 mt-0.5">
-                    {{ isTeacherInlineActive(t.uuid) ? 'Редактирование в строке' : 'Кафедры и должность меняются прямо в таблице' }}
+                    Изменения сохраняются сразу
                   </div>
                 </div>
               </td>
@@ -615,7 +651,7 @@ onMounted(() => {
                         <input
                           type="checkbox"
                           :checked="hasTeacherInlineDepartment(d.id)"
-                          @change="toggleTeacherInlineDepartment(d.id)"
+                          @change="toggleTeacherInlineDepartment(t, d.id)"
                           class="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         />
                         <span class="flex flex-col gap-0.5">
@@ -647,7 +683,7 @@ onMounted(() => {
                   >
                     <button
                       type="button"
-                      @click.stop="teacherInlineForm.position_id = ''; closeTeacherInlineMenus()"
+                      @click.stop="setTeacherInlinePosition(t, '')"
                       class="w-full rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-white/10"
                     >
                       Не указана
@@ -656,7 +692,7 @@ onMounted(() => {
                       v-for="item in positions"
                       :key="item.id"
                       type="button"
-                      @click.stop="teacherInlineForm.position_id = String(item.id); closeTeacherInlineMenus()"
+                      @click.stop="setTeacherInlinePosition(t, String(item.id))"
                       class="w-full rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-white/10"
                     >
                       {{ item.name }}
@@ -679,17 +715,6 @@ onMounted(() => {
               <td class="px-5 py-3 text-right">
                 <div class="flex flex-col items-end gap-2">
                   <div v-if="busy.updateTeacherPosition === t.uuid" class="text-[11px] text-slate-400">Сохранение...</div>
-                  <template v-else-if="isTeacherInlineActive(t.uuid)">
-                    <button
-                      @click.stop="saveTeacherSettings"
-                      :disabled="!hasTeacherInlineChanges(t.uuid)"
-                      class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600"
-                    >
-                      Сохранить
-                    </button>
-                    <button @click.stop="cancelTeacherInlineEdit" class="text-slate-500 font-bold hover:text-slate-700 dark:hover:text-slate-200 text-xs">Отмена</button>
-                  </template>
-                  <div v-else class="text-[11px] text-slate-400">Без раскрытия строки</div>
                   <button @click.stop="deleteEntity(`/teacher-directory/${t.uuid}`, 'Удалён из справочника')" class="text-red-500 font-bold hover:text-red-700 text-xs">Удалить</button>
                 </div>
                 <div v-if="teacherDepartmentMenuUuid === t.uuid || teacherPositionMenuUuid === t.uuid" @click="closeTeacherInlineMenus" class="fixed inset-0 z-10"></div>
@@ -864,11 +889,14 @@ onMounted(() => {
           <div>
             <h2 class="text-xl font-black dark:text-white">Архив семестров</h2>
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">
-              Здесь хранятся прошлые семестры. Первый прошлый семестр загружается вручную через <code class="bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">schedules.json</code>, а снимки дальше пополняют архив для следующих циклов.
+              Здесь хранятся прошлые семестры. Первый прошлый семестр можно загрузить вручную через <code class="bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">schedules.json</code> или тестово собрать из текущего API 2.0.0.
             </p>
           </div>
-          <div>
+          <div class="flex flex-wrap gap-2">
             <input ref="pastSemesterFileInput" type="file" accept=".json" class="hidden" @change="handlePastSemesterFile" />
+            <button @click="importCurrentSemesterAsPast" :disabled="busy.importCurrentSemesterAsPast" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
+              {{ busy.importCurrentSemesterAsPast ? '⏳ Сборка...' : '↺ Сделать текущий прошлым' }}
+            </button>
             <button @click="triggerPastSemesterUpload" :disabled="busy.importPastSemester" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
               {{ busy.importPastSemester ? '⏳ Импорт...' : '📂 Загрузить schedules.json' }}
             </button>

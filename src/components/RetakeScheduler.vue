@@ -9,6 +9,7 @@ type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
 type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
+type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
   groupHistory: GroupHistoryEntry[];
   existingRetakes: GroupRetake[];
@@ -95,6 +96,8 @@ const formContext = ref<RetakeFormContext>(createEmptyFormContext());
 const isLoadingFormContext = ref(false);
 const formContextError = ref<string | null>(null);
 const hasLoadedFormContext = ref(false);
+const formContextLoadScope = ref<FormContextScope>('idle');
+const autoMainTeacherMessage = ref<string | null>(null);
 let formContextRequestId = 0;
 let suppressFormContextReload = false;
 
@@ -133,6 +136,18 @@ const availableSubjects = computed(() =>
     .map((subject) => ({ ...subject, name: cleanSubjectName(subject.name) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
 );
+
+const teachersByNormalizedName = computed(() => {
+  const map = new Map<string, string[]>();
+  props.teachers.forEach((teacher) => {
+    const key = teacher.fullName.trim().toLowerCase();
+    if (!key) return;
+    const existing = map.get(key) ?? [];
+    existing.push(teacher.uuid);
+    map.set(key, existing);
+  });
+  return map;
+});
 
 const selectedSubjectOption = computed(() =>
   availableSubjects.value.find((subject) => subject.uuid === selectedSubject.value) ?? null,
@@ -238,6 +253,57 @@ const resetFormContext = () => {
   formContext.value = createEmptyFormContext();
 };
 
+const resetSubjectContext = () => {
+  formContext.value = {
+    ...formContext.value,
+    subjectBlockedReason: null,
+    assignedAttempts: [],
+    nextAttemptNumber: 1,
+    availableMainTeacherUuids: [],
+    availableCommissionTeacherUuids: [],
+    availableChairmanUuids: [],
+    mainTeacherLacksDept: false,
+  };
+};
+
+const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContext) => {
+  if (scope === 'group') {
+    formContext.value = {
+      ...formContext.value,
+      groupHistory: nextContext.groupHistory,
+      existingRetakes: nextContext.existingRetakes,
+      availableSubjects: nextContext.availableSubjects,
+    };
+    return;
+  }
+
+  if (scope === 'subject') {
+    formContext.value = {
+      ...formContext.value,
+      subjectBlockedReason: nextContext.subjectBlockedReason,
+      assignedAttempts: nextContext.assignedAttempts,
+      nextAttemptNumber: nextContext.nextAttemptNumber,
+      availableMainTeacherUuids: nextContext.availableMainTeacherUuids,
+      availableCommissionTeacherUuids: [],
+      availableChairmanUuids: [],
+      mainTeacherLacksDept: false,
+    };
+    return;
+  }
+
+  if (scope === 'teachers') {
+    formContext.value = {
+      ...formContext.value,
+      availableCommissionTeacherUuids: nextContext.availableCommissionTeacherUuids,
+      availableChairmanUuids: nextContext.availableChairmanUuids,
+      mainTeacherLacksDept: nextContext.mainTeacherLacksDept,
+    };
+    return;
+  }
+
+  formContext.value = nextContext;
+};
+
 const formContextErrorText = (error: unknown) => (
   error instanceof BackendApiError
     ? error.detail
@@ -269,17 +335,84 @@ const normalizeSelectedTeacherState = (context: RetakeFormContext) => {
   return false;
 };
 
-const loadFormContext = async () => {
+const selectedSubjectKey = computed(() => {
+  const subjectName = selectedSubjectOption.value?.name ?? '';
+  return cleanSubjectName(subjectName).trim().toLowerCase();
+});
+
+const autoMainTeacherCandidateNames = (context: RetakeFormContext): string[] => {
+  if (!selectedSubjectKey.value) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      context.groupHistory
+        .filter((entry) => cleanSubjectName(entry.subjectName).trim().toLowerCase() === selectedSubjectKey.value)
+        .flatMap((entry) => entry.teacherNames.map((teacherName) => teacherName.trim()).filter(Boolean)),
+    ),
+  ];
+};
+
+const applyAutoMainTeachers = (context: RetakeFormContext, force = false) => {
+  if (!selectedSubject.value || subjectBelongsToAnotherDept.value) {
+    autoMainTeacherMessage.value = null;
+    return;
+  }
+
+  const candidateNames = autoMainTeacherCandidateNames(context);
+  if (candidateNames.length === 0) {
+    autoMainTeacherMessage.value = 'Автоподстановка ведущего недоступна: в прошлом семестре для этой дисциплины преподаватель не найден.';
+    if (force) {
+      mainTeachers.value = [];
+    }
+    return;
+  }
+
+  const matchedTeacherUuids = [
+    ...new Set(
+      candidateNames.flatMap((teacherName) => teachersByNormalizedName.value.get(teacherName.toLowerCase()) ?? []),
+    ),
+  ];
+  if (matchedTeacherUuids.length === 0) {
+    autoMainTeacherMessage.value = 'Автоподстановка ведущего недоступна: преподаватель из прошлого семестра не найден в локальном справочнике.';
+    if (force) {
+      mainTeachers.value = [];
+    }
+    return;
+  }
+
+  const allowedMainTeachers = new Set(context.availableMainTeacherUuids);
+  const suggestedTeacherUuids = matchedTeacherUuids.filter((uuid) => allowedMainTeachers.has(uuid));
+  if (suggestedTeacherUuids.length === 0) {
+    autoMainTeacherMessage.value = 'Автоподстановка ведущего недоступна: найденные преподаватели сейчас недоступны для выбора по текущим ограничениям.';
+    if (force) {
+      mainTeachers.value = [];
+    }
+    return;
+  }
+
+  if (force || mainTeachers.value.length === 0) {
+    mainTeachers.value = suggestedTeacherUuids;
+  }
+  autoMainTeacherMessage.value = suggestedTeacherUuids.length === 1
+    ? 'Ведущий преподаватель подставлен автоматически по данным прошлого семестра.'
+    : 'Ведущие преподаватели подставлены автоматически по данным прошлого семестра.';
+};
+
+const loadFormContext = async (scope: FormContextScope = 'full') => {
   if (!currentGroup.value) {
     resetFormContext();
     formContextError.value = null;
     hasLoadedFormContext.value = false;
     isLoadingFormContext.value = false;
+    formContextLoadScope.value = 'idle';
     return;
   }
 
   const requestId = ++formContextRequestId;
   isLoadingFormContext.value = true;
+  formContextLoadScope.value = scope;
   formContextError.value = null;
 
   try {
@@ -295,6 +428,9 @@ const loadFormContext = async () => {
           mainTeacherUuids: mainTeachers.value,
           commissionTeacherUuids: commissionTeachers.value,
           chairmanUuid: chairmanTeacher.value || undefined,
+          includeGroupData: scope === 'group' || scope === 'full',
+          includeSubjectData: scope === 'subject' || scope === 'full',
+          includeTeacherData: scope === 'teachers' || scope === 'full',
         }),
       },
     );
@@ -305,20 +441,22 @@ const loadFormContext = async () => {
 
     const nextContext = normalizeRetakeFormContext(rawContext);
 
-    formContext.value = nextContext;
+    mergeFormContext(scope, nextContext);
     hasLoadedFormContext.value = true;
 
-    if (!selectedSubject.value && nextContext.availableSubjects.length > 0) {
-      return;
+    if (scope === 'teachers' || scope === 'full') {
+      normalizeSelectedTeacherState(formContext.value);
     }
 
-    const changedSelection = normalizeSelectedTeacherState(nextContext);
-    if (changedSelection) {
-      return;
+    if ((scope === 'subject' || scope === 'full') && selectedSubject.value) {
+      applyAutoMainTeachers(formContext.value, scope === 'subject');
     }
 
-    if (assignedAttempts.value.includes(attemptNumber.value) || attemptNumber.value < 1 || attemptNumber.value > 3) {
-      attemptNumber.value = nextContext.nextAttemptNumber;
+    if (
+      (scope === 'subject' || scope === 'full')
+      && (assignedAttempts.value.includes(attemptNumber.value) || attemptNumber.value < 1 || attemptNumber.value > 3)
+    ) {
+      attemptNumber.value = formContext.value.nextAttemptNumber;
     }
   } catch (error) {
     if (requestId !== formContextRequestId) {
@@ -331,6 +469,7 @@ const loadFormContext = async () => {
   } finally {
     if (requestId === formContextRequestId) {
       isLoadingFormContext.value = false;
+      formContextLoadScope.value = 'idle';
     }
   }
 };
@@ -351,33 +490,57 @@ watch(selectedGroupUuid, async (newUuid, oldUuid) => {
 
   suppressFormContextReload = true;
   showSubjectDropdown.value = false;
+  showMainDropdown.value = false;
+  showCommDropdown.value = false;
+  showChairmanDropdown.value = false;
   selectedSubject.value = '';
   mainTeachers.value = [];
   commissionTeachers.value = [];
   chairmanTeacher.value = null;
   selectedSlots.value = [];
   daySchedule.value = null;
+  autoMainTeacherMessage.value = null;
   resetFormContext();
   formContextError.value = null;
   hasLoadedFormContext.value = false;
 
   try {
-    await loadFormContext();
+    await loadFormContext('group');
   } finally {
     suppressFormContextReload = false;
   }
 });
 
+watch(selectedSubject, async () => {
+  if (suppressFormContextReload || !selectedGroupUuid.value) return;
+
+  showMainDropdown.value = false;
+  showCommDropdown.value = false;
+  showChairmanDropdown.value = false;
+  mainTeachers.value = [];
+  commissionTeachers.value = [];
+  chairmanTeacher.value = null;
+  selectedSlots.value = [];
+  daySchedule.value = null;
+  autoMainTeacherMessage.value = null;
+  resetSubjectContext();
+
+  if (!selectedSubject.value) {
+    return;
+  }
+
+  await loadFormContext('subject');
+});
+
 watch(
   [
-    selectedSubject,
     () => mainTeachers.value.join(','),
     () => commissionTeachers.value.join(','),
     chairmanTeacher,
   ],
   async () => {
-    if (suppressFormContextReload || !selectedGroupUuid.value) return;
-    await loadFormContext();
+    if (suppressFormContextReload || !selectedGroupUuid.value || !selectedSubject.value) return;
+    await loadFormContext('teachers');
   },
 );
 
@@ -458,7 +621,7 @@ const submitRetake = async () => {
       },
     );
 
-    await loadFormContext();
+    await loadFormContext('full');
     selectedSlots.value = [];
     selectedDate.value = '';
     addToast('Пересдача успешно назначена.', 'success');
@@ -478,7 +641,7 @@ const deleteRetake = async (id: string) => {
   try {
     await fetchBackendFromBrowser(props.backendApiUrl, `/retakes/${id}`, { method: 'DELETE' });
     addToast('Пересдача удалена.', 'success');
-    await loadFormContext();
+    await loadFormContext('full');
     selectedDate.value = '';
   } catch (error) {
     addToast(error instanceof Error ? error.message : 'Не удалось удалить пересдачу.', 'error');
@@ -631,11 +794,18 @@ const deleteRetake = async (id: string) => {
             {{ formContext.subjectBlockedReason }}
           </p>
           <p
-              v-else-if="selectedGroupUuid && isLoadingFormContext"
+              v-else-if="selectedGroupUuid && isLoadingFormContext && formContextLoadScope === 'group'"
               class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 flex items-start gap-1.5"
           >
             <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
             Загружаем дисциплины и историю группы...
+          </p>
+          <p
+              v-else-if="selectedSubject && isLoadingFormContext && formContextLoadScope === 'subject'"
+              class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 flex items-start gap-1.5"
+          >
+            <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            Проверяем попытки и ведущего по данным прошлого семестра...
           </p>
           <p
               v-else-if="formContextError"
@@ -1012,6 +1182,14 @@ const deleteRetake = async (id: string) => {
               </div>
 
               <div v-if="showMainDropdown" @click="showMainDropdown = false" class="fixed inset-0 z-10"></div>
+              <p
+                  v-if="selectedSubject && autoMainTeacherMessage"
+                  class="mt-2 text-xs font-medium flex items-start gap-1.5"
+                  :class="mainTeachers.length > 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'"
+              >
+                <Info class="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                {{ autoMainTeacherMessage }}
+              </p>
             </div>
 
             <!-- Chairman -->

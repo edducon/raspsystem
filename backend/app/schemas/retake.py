@@ -80,6 +80,9 @@ class RetakeFormContextRequest(BaseModel):
     main_teacher_uuids: list[str] = Field(default_factory=list)
     commission_teacher_uuids: list[str] = Field(default_factory=list)
     chairman_uuid: str | None = None
+    include_group_data: bool = True
+    include_subject_data: bool = True
+    include_teacher_data: bool = True
 
 
 class RetakeFormContextRead(BaseModel):

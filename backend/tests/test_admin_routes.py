@@ -244,6 +244,28 @@ class AdminRouteSmokeTests(unittest.TestCase):
         self.assertEqual(payload.group_uuid, "g-1")
         self.assertEqual(payload.main_teacher_uuids, ["t-1"])
 
+    def test_import_current_semester_as_past_route(self) -> None:
+        response_payload = {
+            "success": True,
+            "source_path": "api-v2-current-semester",
+            "imported_records": 15,
+            "unique_groups": 3,
+            "unique_subjects": 7,
+            "date_range_start": "2026-02-09",
+            "date_range_end": "2026-06-30",
+            "message": "Текущий семестр из API 2.0.0 сохранён как прошлый.",
+        }
+        with patch.object(
+            retakes_route.RetakeAdminService,
+            "import_current_semester_as_past",
+            return_value=response_payload,
+        ) as import_current:
+            response = self.client.post("/api/retakes/admin/past-semester/import-current")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["importedRecords"], 15)
+        import_current.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

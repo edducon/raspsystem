@@ -119,6 +119,14 @@ def import_past_semester_json(
     return RetakeAdminService(db).import_past_semester_json(payload)
 
 
+@router.post("/admin/past-semester/import-current", response_model=PastSemesterImportResponse)
+def import_current_semester_as_past(
+        _: User = Depends(require_admin),
+        db: Session = Depends(get_db),
+) -> PastSemesterImportResponse:
+    return RetakeAdminService(db).import_current_semester_as_past()
+
+
 @router.post("/admin/sync-teachers")
 def sync_teachers_from_api(
         _: User = Depends(require_admin),
