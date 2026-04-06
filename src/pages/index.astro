@@ -6,27 +6,35 @@ import StudentBoard from '../components/StudentBoard.vue';
 import { fetchBackendFromServer } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
 
-let apiGroups = [];
-let apiSubjects = [];
-let allRetakes = [];
+let apiGroups: any[] = [];
+let apiSubjects: any[] = [];
+let allRetakes: any[] = [];
+
 try {
     const [dictionaries, retakesRes] = await Promise.all([
         fetchBackendFromServer('/schedule-data/dictionaries'),
         fetchBackendFromServer('/retakes/'),
-    ]);
+    ]) as [any, any[]];
+
     apiGroups = dictionaries?.groups ?? [];
     apiSubjects = dictionaries?.subjects ?? [];
-    allRetakes = retakesRes;
+    allRetakes = retakesRes ?? [];
 } catch (error) {
     console.error('Failed to load public retakes', error);
 }
 
 const today = new Date().toISOString().split('T')[0];
+
 const formattedRetakes = allRetakes.map((retake: any) => ({
     id: retake.id,
     groupUuid: retake.groupUuid,
-    groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
-    subjectName: cleanSubjectName(retake.subjectName || apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина'),
+    groupName:
+        apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
+    subjectName: cleanSubjectName(
+        retake.subjectName ||
+        apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name ||
+        'Неизвестная дисциплина'
+    ),
     date: retake.date,
     timeSlots: retake.timeSlots,
     room: retake.roomUuid,
@@ -35,96 +43,97 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
     teachers: retake.teachers || [],
 }));
 ---
+
 <Layout title="Расписание пересдач">
     <a
             slot="nav-actions"
             href="/login"
-            class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:border-gray-400 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
-            style="background-color: white; color: #1f2937; border-color: #d1d5db;"
+            data-arc-trigger
+            class="inline-flex items-center justify-center h-10 px-4 rounded-xl border border-slate-300 bg-white text-slate-900 hover:bg-slate-100 text-sm font-semibold transition"
     >
         Войти
     </a>
 
-    <div class="relative">
-        <section class="relative min-h-[78vh] sm:min-h-[82vh] flex items-center overflow-hidden">
-            <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(239,68,68,0.34),transparent_22%),radial-gradient(circle_at_82%_16%,rgba(59,130,246,0.24),transparent_20%),linear-gradient(180deg,rgba(5,7,11,0.88)_0%,rgba(10,10,14,0.82)_42%,rgba(15,23,42,0.72)_100%)] dark:bg-[radial-gradient(circle_at_18%_22%,rgba(239,68,68,0.38),transparent_22%),radial-gradient(circle_at_82%_16%,rgba(59,130,246,0.26),transparent_20%),linear-gradient(180deg,rgba(4,4,6,0.92)_0%,rgba(8,10,15,0.88)_42%,rgba(15,23,42,0.82)_100%)]"></div>
+    <div class="hero-shell min-h-screen bg-[#f5f5f8] dark:bg-[#05070b]">
+        <div class="hero-arcs" aria-hidden="true">
+            <svg class="hero-arcs-svg" viewBox="0 0 1600 1100" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="arcWhite" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#f8fafc" />
+                        <stop offset="72%" stop-color="#dce2f8" />
+                        <stop offset="100%" stop-color="#becaf2" />
+                    </linearGradient>
 
-                <div class="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:42px_42px]"></div>
+                    <linearGradient id="arcBlue" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#a5b8ff" />
+                        <stop offset="100%" stop-color="#6f8ff0" />
+                    </linearGradient>
 
-                <div class="absolute -top-20 left-[8%] w-[420px] h-[300px] rounded-full bg-red-500/15 blur-3xl animate-pulse"></div>
-                <div class="absolute top-[12%] right-[8%] w-[360px] h-[300px] rounded-full bg-blue-500/15 blur-3xl animate-pulse"></div>
-                <div class="absolute bottom-[-120px] left-1/2 -translate-x-1/2 w-[900px] h-[300px] rounded-full border border-white/10"></div>
-                <div class="absolute bottom-[-170px] left-1/2 -translate-x-1/2 w-[1200px] h-[420px] rounded-full border border-white/5"></div>
-            </div>
+                    <linearGradient id="arcCyan" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#4ef5ff" />
+                        <stop offset="100%" stop-color="#2cd3ff" />
+                    </linearGradient>
+                </defs>
+                <path
+                        class="arc-base arc-base-left"
+                        d="M -120 38
+                       C 260 52, 590 205, 820 470
+                       C 960 632, 1045 840, 1125 1110"
+                />
+                <path
+                        class="arc-base arc-base-right"
+                        d="M 1122 1110
+                       C 1148 965, 1198 835, 1288 724
+                       C 1368 626, 1478 560, 1638 520"
+                />
+                <path
+                        class="arc-trace arc-trace-left"
+                        d="M -120 38
+                       C 260 52, 590 205, 820 470
+                       C 960 632, 1045 840, 1125 1110"
+                />
+                <path
+                        class="arc-trace arc-trace-right"
+                        d="M 1122 1110
+                       C 1148 965, 1198 835, 1288 724
+                       C 1368 626, 1478 560, 1638 520"
+                />
 
-            <div class="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 sm:-mt-6 pb-28 sm:pb-32">
-                <div class="max-w-3xl">
-                    <h1 class="text-white text-4xl sm:text-6xl lg:text-7xl font-black tracking-[-0.05em] leading-[0.94]">
-                        Расписание
-                        <span class="block text-white/75">пересдач</span>
+                <!-- свечение -->
+                <path
+                        class="arc-glow arc-glow-left"
+                        d="M -120 38
+                       C 260 52, 590 205, 820 470
+                       C 960 632, 1045 840, 1125 1110"
+                />
+                <path
+                        class="arc-glow arc-glow-right"
+                        d="M 1122 1110
+                       C 1148 965, 1198 835, 1288 724
+                       C 1368 626, 1478 560, 1638 520"
+                />
+            </svg>
+        </div>
+
+        <section class="relative z-10 pt-10 pb-8 sm:pt-14 sm:pb-10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="max-w-4xl">
+                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-[-0.05em] text-slate-950 dark:text-white">
+                        Расписание пересдач
                     </h1>
 
-                    <div class="mt-8 flex flex-wrap items-center gap-3">
-                        <div class="mt-8 flex flex-wrap items-center gap-3">
-                            <a
-                                    href="#board"
-                                    class="inline-flex items-center justify-center h-12 px-6 rounded-2xl bg-red-500 text-white text-sm font-bold shadow-[0_16px_40px_rgba(239,68,68,0.28)] hover:bg-blue-600 hover:shadow-[0_16px_40px_rgba(37,99,235,0.28)] hover:-translate-y-0.5 transition-all duration-300"
-                            >
-                                Смотреть расписание
-                            </a>
-                            <a
-                                    href="/login"
-                                    class="inline-flex items-center justify-center h-12 px-6 rounded-2xl border border-white/12 bg-white/8 text-white/90 text-sm font-semibold backdrop-blur-xl hover:border-blue-500/50 hover:bg-blue-500/20 hover:text-blue-600 dark:hover:text-white/90 hover:-translate-y-0.5 transition-all duration-300"
-                            >
-                                Личный кабинет
-                            </a>
+                    <p class="mt-4 text-lg sm:text-xl text-slate-500 dark:text-slate-400 max-w-3xl">
+                        Найдите пересдачу по группе, предмету или преподавателю
+                    </p>
 
-                        </div>
-
-                </div>
-            </div>
-        </section>
-
-        <section class="relative z-20 -mt-32 sm:-mt-40 pb-8">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="grid grid-cols-1 lg:grid-cols-[1.05fr_1.25fr] rounded-[28px] overflow-hidden shadow-[0_24px_80px_rgba(15,23,42,0.22)] border border-white/10">
-                    <div class="bg-red-500 px-6 py-7 sm:px-8 sm:py-8 text-white">
-                        <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-white/70 font-bold">
-                            Сервис
-                        </p>
-                        <h2 class="mt-3 text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-                            Всё расписание пересдач
-                            в одном месте
-                        </h2>
-                        <p class="mt-4 text-sm sm:text-base text-white/80 max-w-md leading-7">
-                            Быстрый доступ к предметам, группам, датам, времени проведения
-                            и преподавателям без лишних переходов.
-                        </p>
-                    </div>
-
-                    <div class="bg-white dark:bg-[#111318] px-6 py-7 sm:px-8 sm:py-8">
-                        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
-                            <div>
-                                <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500 font-bold">
-                                    Актуальность
-                                </p>
-                                <h3 class="mt-3 text-2xl sm:text-3xl font-black tracking-tight text-slate-950 dark:text-white">
-                                    Удобный поиск и
-                                    <br class="hidden sm:block" />
-                                    актуальные данные
-                                </h3>
-                            </div>
-
-                            <div class="shrink-0">
-                                <div class="text-5xl sm:text-6xl font-black tracking-[-0.06em] text-slate-950 dark:text-white">
-                                    {formattedRetakes.length}
-                                </div>
-                                <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                    записей в системе
-                                </div>
-                            </div>
-                        </div>
+                    <div class="mt-8">
+                        <a
+                                href="#board"
+                                data-arc-trigger
+                                class="inline-flex items-center justify-center h-12 px-6 rounded-2xl bg-red-500 text-white text-sm font-bold shadow-[0_12px_30px_rgba(239,68,68,0.22)] hover:bg-red-600 transition-all duration-200"
+                        >
+                            Перейти к поиску
+                        </a>
                     </div>
                 </div>
             </div>
@@ -132,20 +141,7 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
 
         <section id="board" class="relative z-10 pb-16 sm:pb-20">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="mb-6 sm:mb-8">
-                    <p class="text-[11px] sm:text-xs uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500 font-bold">
-                        Основной раздел
-                    </p>
-                    <h2 class="mt-3 text-2xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                        Актуальное расписание
-                    </h2>
-                    <p class="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-7">
-                        Здесь можно быстро найти нужную пересдачу по группе, предмету,
-                        преподавателю и дате.
-                    </p>
-                </div>
-
-                <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] p-3 sm:p-4 lg:p-5">
+                <div class="rounded-[32px] border border-slate-200/80 bg-white/90 backdrop-blur-sm shadow-[0_24px_80px_rgba(15,23,42,0.08)] p-4 sm:p-6 lg:p-8 dark:border-white/10 dark:bg-white/[0.03]">
                     <StudentBoard
                             client:load
                             groups={apiGroups}
@@ -156,4 +152,225 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
             </div>
         </section>
     </div>
+
+    <style is:global>
+        .hero-shell {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-arcs {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .hero-arcs-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .arc-base,
+        .arc-trace,
+        .arc-glow {
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vector-effect: non-scaling-stroke;
+        }
+
+
+        .arc-base-left {
+            stroke: url(#arcWhite);
+            stroke-width: 56;
+            opacity: 0.94;
+        }
+
+        .arc-base-right {
+            stroke: url(#arcBlue);
+            stroke-width: 56;
+            opacity: 0.94;
+        }
+
+
+        .arc-glow-left {
+            stroke: rgba(255,255,255,0.12);
+            stroke-width: 92;
+            filter: blur(24px);
+            opacity: 0.42;
+        }
+
+        .arc-glow-right {
+            stroke: rgba(111,143,240,0.16);
+            stroke-width: 92;
+            filter: blur(24px);
+            opacity: 0.42;
+        }
+
+        .arc-trace {
+            opacity: 0;
+            stroke-dasharray: 3200;
+            stroke-dashoffset: 3200;
+        }
+        .arc-trace-left {
+            stroke: #ffffff;
+            stroke-width: 64;
+            filter: drop-shadow(0 0 18px rgba(255,255,255,0.24));
+        }
+        .arc-trace-right {
+            stroke: #98b2ff;
+            stroke-width: 64;
+            filter: drop-shadow(0 0 20px rgba(152,178,255,0.28));
+        }
+        .arc-trace-cyan {
+            stroke: #41f2ff;
+            stroke-width: 8;
+            filter: drop-shadow(0 0 10px rgba(65,242,255,0.45));
+            stroke-dasharray: 120;
+            stroke-dashoffset: 120;
+        }
+        .hero-shell.is-arc-animating .arc-trace-left {
+            animation: arcDrawLeft 1.2s cubic-bezier(.2,.7,.2,1) forwards;
+        }
+        .hero-shell.is-arc-animating .arc-trace-right {
+            animation: arcDrawRight 1.35s cubic-bezier(.22,.7,.2,1) 0.82s forwards;
+        }
+        .hero-shell.is-arc-animating .arc-base-left {
+            animation: arcBasePulseLeft 1.5s ease;
+        }
+        .hero-shell.is-arc-animating .arc-base-right {
+            animation: arcBasePulseRight 1.5s ease 0.72s;
+        }
+        .hero-shell.is-arc-animating .arc-glow-left {
+            animation: arcGlowPulse 1.35s ease;
+        }
+
+        .hero-shell.is-arc-animating .arc-glow-right {
+            animation: arcGlowPulse 1.35s ease 0.72s;
+        }
+        @keyframes arcDrawLeft {
+            0% {
+                stroke-dashoffset: 2600;
+                opacity: 0;
+            }
+            8% {
+                opacity: 1;
+            }
+            76% {
+                stroke-dashoffset: 0;
+                opacity: 1;
+            }
+            100% {
+                stroke-dashoffset: 0;
+                opacity: 0;
+            }
+        }
+
+        @keyframes arcDrawRight {
+            0% {
+                stroke-dashoffset: 3200;
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            85% {
+                stroke-dashoffset: 0;
+                opacity: 1;
+            }
+            100% {
+                stroke-dashoffset: 0;
+                opacity: 0;
+            }
+        }
+
+        @keyframes arcDrawCyan {
+            0% {
+                stroke-dashoffset: 120;
+                opacity: 0;
+            }
+            20% {
+                opacity: 1;
+            }
+            80% {
+                stroke-dashoffset: 0;
+                opacity: 1;
+            }
+            100% {
+                stroke-dashoffset: 0;
+                opacity: 0;
+            }
+        }
+
+        @keyframes arcBasePulseLeft {
+            0%, 100% {
+                opacity: 0.94;
+                filter: none;
+            }
+            50% {
+                opacity: 1;
+                filter: drop-shadow(0 0 24px rgba(255,255,255,0.14));
+            }
+        }
+
+        @keyframes arcBasePulseRight {
+            0%, 100% {
+                opacity: 0.94;
+                filter: none;
+            }
+            50% {
+                opacity: 1;
+                filter: drop-shadow(0 0 24px rgba(152,178,255,0.18));
+            }
+        }
+
+        @keyframes arcGlowPulse {
+            0%, 100% {
+                opacity: 0.42;
+            }
+            50% {
+                opacity: 0.74;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .hero-shell.is-arc-animating .arc-trace-left,
+            .hero-shell.is-arc-animating .arc-trace-right,
+            .hero-shell.is-arc-animating .arc-trace-cyan,
+            .hero-shell.is-arc-animating .arc-base-left,
+            .hero-shell.is-arc-animating .arc-base-right,
+            .hero-shell.is-arc-animating .arc-glow-left,
+            .hero-shell.is-arc-animating .arc-glow-right {
+                animation: none !important;
+            }
+        }
+    </style>
+
+    <script>
+        (() => {
+            const hero = document.querySelector('.hero-shell');
+            const triggers = document.querySelectorAll('[data-arc-trigger]');
+            if (!hero || !triggers.length) return;
+
+            let timer;
+
+            const runAnimation = () => {
+                hero.classList.remove('is-arc-animating');
+                void hero.offsetWidth;
+                hero.classList.add('is-arc-animating');
+
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    hero.classList.remove('is-arc-animating');
+                }, 2100);
+            };
+
+            triggers.forEach((el) => {
+                el.addEventListener('mouseenter', runAnimation);
+                el.addEventListener('focus', runAnimation);
+            });
+        })();
+    </script>
 </Layout>
