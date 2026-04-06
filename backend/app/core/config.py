@@ -40,6 +40,20 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_database_uri(self) -> str:
+        # Prefer the discrete Postgres settings when they were provided explicitly.
+        # This avoids subtle mismatches when DATABASE_URL and POSTGRES_* drift apart.
+        postgres_fields = {
+            "postgres_server",
+            "postgres_port",
+            "postgres_user",
+            "postgres_password",
+            "postgres_db",
+        }
+        if postgres_fields.issubset(self.model_fields_set):
+            return (
+                f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_server}:{self.postgres_port}/{self.postgres_db}"
+            )
         if self.database_url:
             return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
         return (
