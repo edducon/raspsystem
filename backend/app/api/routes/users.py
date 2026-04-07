@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import require_admin
 from app.models import User
 from app.db.session import get_db
 from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.services.audit_service import AuditService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -32,30 +33,60 @@ def get_user(
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     data: UserCreate,
-    _: User = Depends(require_admin),
+    request: Request,
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:
     service = UserService(db)
-    return service.create_user(data)
+    created_user = service.create_user(data)
+    AuditService(db).record(
+        action="admin.user.create",
+        actor=current_admin,
+        request=request,
+        target_type="user",
+        target_id=str(created_user.id),
+        details={"username": created_user.username, "role": created_user.role},
+    )
+    return created_user
 
 
 @router.put("/{user_id}", response_model=UserRead)
 def update_user(
     user_id: int,
     data: UserUpdate,
+    request: Request,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:
     service = UserService(db)
-    return service.update_user(user_id, data, actor=current_admin)
+    updated_user = service.update_user(user_id, data, actor=current_admin)
+    AuditService(db).record(
+        action="admin.user.update",
+        actor=current_admin,
+        request=request,
+        target_type="user",
+        target_id=str(updated_user.id),
+        details={"username": updated_user.username, "role": updated_user.role},
+    )
+    return updated_user
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
+    request: Request,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     service = UserService(db)
+    user = service.get_user(user_id)
     service.delete_user(user_id, actor=current_admin)
+    AuditService(db).record(
+        action="admin.user.delete",
+        actor=current_admin,
+        request=request,
+        target_type="user",
+        target_id=str(user_id),
+        details={"username": user.username},
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

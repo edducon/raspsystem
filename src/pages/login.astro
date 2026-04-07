@@ -5,7 +5,7 @@ import { getPublicBackendApiUrl } from '../lib/backend-auth';
 export const prerender = false;
 
 if (Astro.locals.user) {
-    return Astro.redirect('/dashboard');
+    return Astro.redirect(Astro.locals.user.mustChangePassword ? '/profile?forcePasswordChange=1' : '/dashboard');
 }
 
 const backendApiUrl = getPublicBackendApiUrl();
@@ -117,7 +117,9 @@ const backendApiUrl = getPublicBackendApiUrl();
                 return;
             }
 
-            window.location.href = '/dashboard';
+            const payload = await response.json().catch(() => ({}));
+            const redirectUrl = payload?.user?.mustChangePassword ? '/profile?forcePasswordChange=1' : '/dashboard';
+            window.location.href = redirectUrl;
         });
     </script>
 </Layout>

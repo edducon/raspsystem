@@ -58,17 +58,42 @@ function buildJsonInit(init: RequestInit = {}): RequestInit {
   };
 }
 
+function getBrowserCsrfToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const token = (window as Window & { __BACKEND_CSRF_TOKEN__?: unknown }).__BACKEND_CSRF_TOKEN__;
+  return typeof token === "string" && token.trim() ? token : null;
+}
+
+function isUnsafeMethod(method: string | undefined): boolean {
+  const normalized = (method ?? "GET").toUpperCase();
+  return !["GET", "HEAD", "OPTIONS"].includes(normalized);
+}
+
 export async function fetchBackendFromBrowser<T>(
   backendApiUrl: string,
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const preparedInit = buildJsonInit(init);
+  const headers = new Headers(preparedInit.headers);
+
+  if (isUnsafeMethod(preparedInit.method)) {
+    const csrfToken = getBrowserCsrfToken();
+    if (csrfToken && !headers.has("X-CSRF-Token")) {
+      headers.set("X-CSRF-Token", csrfToken);
+    }
+  }
+
   const response = await fetch(`${backendApiUrl}${path}`, {
-    ...buildJsonInit(init),
+    ...preparedInit,
+    headers,
     credentials: "include",
   });
 
-  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
+  return parseBackendResponse<T>(response, "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕСЃ Рє СЃРµСЂРІРµСЂСѓ.");
 }
 
 export async function fetchBackendFromServer<T>(
@@ -89,5 +114,5 @@ export async function fetchBackendFromServer<T>(
     headers,
   });
 
-  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
+  return parseBackendResponse<T>(response, "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕСЃ Рє СЃРµСЂРІРµСЂСѓ.");
 }

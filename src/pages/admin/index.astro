@@ -11,6 +11,10 @@ if (!user) {
     return Astro.redirect('/login');
 }
 
+if (user.mustChangePassword) {
+    return Astro.redirect('/profile?forcePasswordChange=1');
+}
+
 if (user.role !== 'ADMIN') {
     return Astro.redirect('/dashboard');
 }
@@ -21,16 +25,18 @@ let teacherDirectory = [];
 let positions = [];
 let teachers = [];
 let scheduleSnapshots = [];
+let auditLogs = [];
 let loadError = '';
 
 try {
-    const [usersRes, departmentsRes, teacherDirectoryRes, positionsRes, teachersRes, scheduleSnapshotsRes] = await Promise.all([
+    const [usersRes, departmentsRes, teacherDirectoryRes, positionsRes, teachersRes, scheduleSnapshotsRes, auditLogsRes] = await Promise.all([
         fetchBackendFromServer('/users/', {}, Astro.request),
         fetchBackendFromServer('/departments/', {}, Astro.request),
         fetchBackendFromServer('/teacher-directory/', {}, Astro.request),
         fetchBackendFromServer('/positions/', {}, Astro.request),
         fetchBackendFromServer('/teachers/', {}, Astro.request),
         fetchBackendFromServer('/schedule-snapshots/', {}, Astro.request),
+        fetchBackendFromServer('/audit-logs/?limit=25&offset=0', {}, Astro.request),
     ]);
 
     users = usersRes;
@@ -39,6 +45,7 @@ try {
     positions = positionsRes;
     teachers = teachersRes;
     scheduleSnapshots = scheduleSnapshotsRes;
+    auditLogs = auditLogsRes;
 } catch (error) {
     console.error('Failed to load admin data', error);
     loadError = error instanceof Error ? error.message : 'Не удалось загрузить данные админ-панели.';
@@ -67,6 +74,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         initialPositions={positions}
         initialTeachers={teachers}
         initialScheduleSnapshots={scheduleSnapshots}
+        initialAuditLogs={auditLogs}
         initialLoadError={loadError}
     />
 </Layout>

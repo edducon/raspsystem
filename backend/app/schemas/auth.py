@@ -31,10 +31,12 @@ class AuthUserRead(BaseModel):
     department_id: Annotated[int | None, Field(default=None, serialization_alias="departmentId")]
     department_ids: Annotated[list[int], Field(default_factory=list, serialization_alias="departmentIds")]
     teacher_uuid: Annotated[str | None, Field(default=None, serialization_alias="teacherUuid")]
+    must_change_password: Annotated[bool, Field(default=False, serialization_alias="mustChangePassword")]
 
 
 class AuthResponse(BaseModel):
     user: AuthUserRead
+    csrf_token: Annotated[str, Field(serialization_alias="csrfToken")]
 
 
 class MessageResponse(BaseModel):

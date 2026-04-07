@@ -1,3 +1,4 @@
+from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.department import Department
 from app.models.past_semester import PastSemester
@@ -11,6 +12,7 @@ from app.models.user import User
 
 __all__ = [
     "Base",
+    "AuditLog",
     "Department",
     "PastSemester",
     "Position",

@@ -9,6 +9,7 @@ const user = Astro.locals.user;
 if (!user) {
     return Astro.redirect('/login');
 }
+const forcePasswordChange = Astro.url.searchParams.get('forcePasswordChange') === '1' || user.mustChangePassword;
 
 let teacherProfile = null;
 if (user.teacherUuid) {
@@ -32,16 +33,17 @@ if (user.departmentIds.length > 0) {
 }
 
 const displayName = teacherProfile?.fullName || user.fullName || user.username;
-const roleLabel = user.role === 'ADMIN' ? 'Администратор' : user.role === 'EMPLOYEE' ? 'Сотрудник' : 'Преподаватель';
+const roleLabel = user.role === 'ADMIN' ? 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ' : user.role === 'EMPLOYEE' ? 'РЎРѕС‚СЂСѓРґРЅРёРє' : 'РџСЂРµРїРѕРґР°РІР°С‚РµР»СЊ';
 const backendApiUrl = getPublicBackendApiUrl();
+const csrfToken = Astro.locals.csrfToken ?? '';
 ---
-<Layout title="Профиль">
+<Layout title="РџСЂРѕС„РёР»СЊ">
     <Fragment slot="nav-actions">
         <a
             href="/dashboard"
             class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
         >
-            &larr; Дашборд
+            &larr; Р”Р°С€Р±РѕСЂРґ
         </a>
     </Fragment>
 
@@ -49,7 +51,7 @@ const backendApiUrl = getPublicBackendApiUrl();
         <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] overflow-hidden">
             <div class="px-6 py-8 sm:px-8 sm:py-9 border-b border-slate-100 dark:border-white/10">
                 <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                    Профиль пользователя
+                    РџСЂРѕС„РёР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ
                 </p>
                 <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
                     {displayName}
@@ -76,14 +78,19 @@ const backendApiUrl = getPublicBackendApiUrl();
 
             <div class="px-6 py-7 sm:px-8 sm:py-8">
                 <div class="mb-6">
+                    {forcePasswordChange && (
+                        <div class="mb-4 rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-800 dark:text-amber-300">
+                            Для продолжения работы нужно сменить стартовый пароль.
+                        </div>
+                    )}
                     <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                        Безопасность
+                        Р‘РµР·РѕРїР°СЃРЅРѕСЃС‚СЊ
                     </p>
                     <h2 class="mt-2 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
-                        Смена пароля
+                        РЎРјРµРЅР° РїР°СЂРѕР»СЏ
                     </h2>
                     <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-lg leading-7">
-                        Пароль обновляется через backend endpoint и больше не использует Astro actions или Lucia.
+                        РџР°СЂРѕР»СЊ РѕР±РЅРѕРІР»СЏРµС‚СЃСЏ С‡РµСЂРµР· backend endpoint Рё Р±РѕР»СЊС€Рµ РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚ Astro actions РёР»Рё Lucia.
                     </p>
                 </div>
 
@@ -92,27 +99,27 @@ const backendApiUrl = getPublicBackendApiUrl();
 
                     <div>
                         <label for="currentPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
-                            Текущий пароль
+                            РўРµРєСѓС‰РёР№ РїР°СЂРѕР»СЊ
                         </label>
                         <input id="currentPassword" name="currentPassword" type="password" required class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
                     </div>
 
                     <div>
                         <label for="newPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
-                            Новый пароль
+                            РќРѕРІС‹Р№ РїР°СЂРѕР»СЊ
                         </label>
                         <input id="newPassword" name="newPassword" type="password" required minlength="6" class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
                     </div>
 
                     <button id="submit-btn" type="submit" class="h-12 px-6 bg-red-500 hover:bg-red-600 text-white text-sm font-black rounded-2xl shadow-[0_16px_40px_rgba(239,68,68,0.22)] transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                        <span>Сохранить</span>
+                        <span>РЎРѕС…СЂР°РЅРёС‚СЊ</span>
                     </button>
                 </form>
             </div>
         </div>
     </section>
 
-    <script define:vars={{ backendApiUrl }}>
+    <script define:vars={{ backendApiUrl, csrfToken }}>
         const form = document.querySelector('#password-form');
         const statusDiv = document.querySelector('#status-message');
         const submitBtn = document.querySelector('#submit-btn');
@@ -122,7 +129,7 @@ const backendApiUrl = getPublicBackendApiUrl();
 
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.querySelector('span').textContent = 'Сохранение...';
+                submitBtn.querySelector('span').textContent = 'РЎРѕС…СЂР°РЅРµРЅРёРµ...';
             }
             if (statusDiv) {
                 statusDiv.className = 'hidden rounded-2xl px-4 py-3.5 text-sm font-medium';
@@ -135,6 +142,7 @@ const backendApiUrl = getPublicBackendApiUrl();
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
+                    'X-CSRF-Token': csrfToken,
                 },
                 body: JSON.stringify({
                     current_password: formData.get('currentPassword'),
@@ -144,14 +152,14 @@ const backendApiUrl = getPublicBackendApiUrl();
 
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.querySelector('span').textContent = 'Сохранить';
+                submitBtn.querySelector('span').textContent = 'РЎРѕС…СЂР°РЅРёС‚СЊ';
             }
 
             if (!response.ok) {
                 const payload = await response.json().catch(() => ({}));
                 if (statusDiv) {
                     statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20';
-                    statusDiv.textContent = payload.detail ?? 'Не удалось обновить пароль';
+                    statusDiv.textContent = payload.detail ?? 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ РїР°СЂРѕР»СЊ';
                 }
                 return;
             }
@@ -162,7 +170,11 @@ const backendApiUrl = getPublicBackendApiUrl();
                 statusDiv.textContent = payload.message;
             }
             form.reset();
+            if (window.location.search.includes('forcePasswordChange=1')) {
+                window.setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 900);
+            }
         });
     </script>
 </Layout>
-

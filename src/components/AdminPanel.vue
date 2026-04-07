@@ -6,12 +6,47 @@ type UserRole = 'ADMIN' | 'EMPLOYEE' | 'TEACHER';
 type StatusKind = 'success' | 'error';
 type SnapshotSummary = { id: number; name: string; semesterLabel: string; status: string; sourceType: string; description: string | null; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string; dateRangeStart: string | null; dateRangeEnd: string | null; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number };
 type ArchiveItem = { id: string; name: string; semesterLabel: string; sourceLabel: string; kind: 'manual' | 'snapshot'; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string | null; dateRangeStart: string | null; dateRangeEnd: string | null; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number; accentClass: string; badgeText: string | null; deletePath: string | null };
-type UserItem = { id: number; username: string; fullName: string; role: UserRole; isActive: boolean; departmentId: number | null; departmentIds: number[]; teacherUuid: string | null };
+type UserItem = { id: number; username: string; fullName: string; role: UserRole; isActive: boolean; mustChangePassword?: boolean; departmentId: number | null; departmentIds: number[]; teacherUuid: string | null };
 type DepartmentItem = { id: number; name: string; short_name: string };
 type TeacherDirectoryItem = { uuid: string; fullName: string; departmentIds: number[]; positionId: number | null };
 type PositionItem = { id: number; name: string; sort_order: number; is_active: boolean };
 type TeacherItem = { id: number; full_name: string; department_id: number; position_id: number | null };
 type PastSemesterStatus = { isLoaded: boolean; importedRecords: number; uniqueGroups: number; uniqueSubjects: number; dateRangeStart: string | null; dateRangeEnd: string | null };
+type AuditLogItem = { id: number; createdAt: string; actorUserId: number | null; action: string; targetType: string | null; targetId: string | null; status: string; ipAddress: string | null; userAgent: string | null; details: Record<string, unknown> | null };
+type AuditLogListResponse = { items: AuditLogItem[]; total: number; limit: number; offset: number };
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  'auth.login': 'Вход в систему',
+  'auth.logout': 'Выход из системы',
+  'auth.change_password': 'Смена пароля',
+  'admin.user.create': 'Создание пользователя',
+  'admin.user.update': 'Обновление пользователя',
+  'admin.user.delete': 'Удаление пользователя',
+  'admin.department.create': 'Создание кафедры',
+  'admin.department.update': 'Обновление кафедры',
+  'admin.department.delete': 'Удаление кафедры',
+  'admin.position.create': 'Создание должности',
+  'admin.position.update': 'Обновление должности',
+  'admin.position.delete': 'Удаление должности',
+  'admin.teacher.create': 'Создание преподавателя',
+  'admin.teacher.update': 'Обновление преподавателя',
+  'admin.teacher.delete': 'Удаление преподавателя',
+  'admin.teacher_directory.create': 'Добавление в справочник',
+  'admin.teacher_directory.update': 'Обновление справочника',
+  'admin.teacher_directory.delete': 'Удаление из справочника',
+  'admin.teacher_directory.sync': 'Синхронизация справочника',
+  'admin.schedule_snapshot.create': 'Создание снимка',
+  'admin.schedule_snapshot.update': 'Обновление снимка',
+  'admin.schedule_snapshot.delete': 'Удаление снимка',
+  'retake.create': 'Создание пересдачи',
+  'retake.delete': 'Удаление пересдачи',
+  'admin.retakes.import_past_semester': 'Импорт прошлого семестра',
+  'admin.retakes.import_past_semester_json': 'Импорт JSON прошлого семестра',
+  'admin.retakes.import_current_semester_as_past': 'Перенос текущего семестра в архив',
+  'admin.retakes.sync_teachers': 'Синхронизация преподавателей',
+  'admin.retakes.reset': 'Сброс пересдач',
+};
+const auditActionOptions = Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({ value, label }));
 
 const props = defineProps<{
   backendApiUrl: string;
@@ -22,6 +57,8 @@ const props = defineProps<{
   initialPositions: PositionItem[];
   initialTeachers: TeacherItem[];
   initialScheduleSnapshots: SnapshotSummary[];
+  initialAuditLogs: AuditLogListResponse;
+  initialLoadError?: string;
 }>();
 
 const users = ref([...props.initialUsers]);
@@ -30,14 +67,27 @@ const teacherDirectory = ref([...props.initialTeacherDirectory]);
 const positions = ref([...props.initialPositions]);
 const teachers = ref([...props.initialTeachers]);
 const scheduleSnapshots = ref([...props.initialScheduleSnapshots]);
-const status = ref<{ kind: StatusKind; message: string } | null>(null);
+const auditLogs = ref([...props.initialAuditLogs.items]);
+const auditTotal = ref(props.initialAuditLogs.total);
+const status = ref<{ kind: StatusKind; message: string } | null>(
+  props.initialLoadError ? { kind: 'error', message: props.initialLoadError } : null
+);
 const pastSemesterInfo = ref<{ imported: number; groups: number; subjects: number; dateRangeStart: string | null; dateRangeEnd: string | null } | null>(null);
+const auditLoading = ref(false);
+const auditFilters = reactive({
+  query: '',
+  action: '',
+  status: '',
+  limit: props.initialAuditLogs.limit || 25,
+  offset: props.initialAuditLogs.offset || 0,
+});
 
 const activeTab = ref('teachers');
 const tabs = [
   { id: 'teachers', label: 'Преподаватели' },
   { id: 'departments', label: 'Кафедры и должности' },
   { id: 'snapshots', label: 'Снимки расписания' },
+  { id: 'audit', label: 'Журнал действий' },
 ];
 
 const busy = reactive({
@@ -81,6 +131,11 @@ const teacherDepartmentMenuUuid = ref('');
 const teacherPositionMenuUuid = ref('');
 const departmentForm = reactive({ name: '', short_name: '' });
 const positionForm = reactive({ name: '', sort_order: 0, is_active: true });
+const auditCurrentPage = computed(() => auditTotal.value === 0 ? 0 : Math.floor(auditFilters.offset / auditFilters.limit) + 1);
+const auditTotalPages = computed(() => auditTotal.value === 0 ? 0 : Math.ceil(auditTotal.value / auditFilters.limit));
+const auditPageStart = computed(() => auditTotal.value === 0 ? 0 : auditFilters.offset + 1);
+const auditPageEnd = computed(() => auditTotal.value === 0 ? 0 : Math.min(auditFilters.offset + auditLogs.value.length, auditTotal.value));
+const hasAuditFilters = computed(() => Boolean(auditFilters.query.trim() || auditFilters.action || auditFilters.status));
 
 // Account creation modal for existing teacher
 const showAccountModal = ref(false);
@@ -231,7 +286,7 @@ function generateUsername(fullName: string): string {
 function generatePassword(): string {
   const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
   let pwd = '';
-  for (let i = 0; i < 8; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 10; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
   return pwd;
 }
 
@@ -250,18 +305,73 @@ async function reloadAll() {
   busy.reload = true;
   resetTeacherInlineForm();
   try {
-    const [u, d, td, p, t, s] = await Promise.all([
+    const [u, d, td, p, t, s, a] = await Promise.all([
       fetchBackendFromBrowser<UserItem[]>(props.backendApiUrl, '/users/'),
       fetchBackendFromBrowser<DepartmentItem[]>(props.backendApiUrl, '/departments/'),
       fetchBackendFromBrowser<TeacherDirectoryItem[]>(props.backendApiUrl, '/teacher-directory/'),
       fetchBackendFromBrowser<PositionItem[]>(props.backendApiUrl, '/positions/'),
       fetchBackendFromBrowser<TeacherItem[]>(props.backendApiUrl, '/teachers/'),
       fetchBackendFromBrowser<SnapshotSummary[]>(props.backendApiUrl, '/schedule-snapshots/'),
+      fetchBackendFromBrowser<AuditLogListResponse>(props.backendApiUrl, buildAuditLogsPath()),
     ]);
-    users.value = u; departments.value = d; teacherDirectory.value = td; positions.value = p; teachers.value = t; scheduleSnapshots.value = s;
+    users.value = u; departments.value = d; teacherDirectory.value = td; positions.value = p; teachers.value = t; scheduleSnapshots.value = s; auditLogs.value = a.items; auditTotal.value = a.total;
     await loadPastSemesterStatus(true);
   } catch (error) { setStatus('error', errorText(error, 'Ошибка обновления данных.')); }
   finally { busy.reload = false; }
+}
+
+function buildAuditLogsPath() {
+  const params = new URLSearchParams();
+  params.set('limit', String(auditFilters.limit));
+  params.set('offset', String(auditFilters.offset));
+  if (auditFilters.query.trim()) params.set('q', auditFilters.query.trim());
+  if (auditFilters.action) params.set('action', auditFilters.action);
+  if (auditFilters.status) params.set('status', auditFilters.status);
+  return `/audit-logs/?${params.toString()}`;
+}
+
+async function loadAuditLogs() {
+  auditLoading.value = true;
+  try {
+    const response = await fetchBackendFromBrowser<AuditLogListResponse>(props.backendApiUrl, buildAuditLogsPath());
+    auditLogs.value = response.items;
+    auditTotal.value = response.total;
+
+    if (response.total > 0 && auditFilters.offset >= response.total) {
+      auditFilters.offset = Math.max(0, Math.floor((response.total - 1) / auditFilters.limit) * auditFilters.limit);
+      return await loadAuditLogs();
+    }
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось загрузить журнал действий.'));
+  } finally {
+    auditLoading.value = false;
+  }
+}
+
+async function applyAuditFilters() {
+  auditFilters.offset = 0;
+  await loadAuditLogs();
+}
+
+async function resetAuditFilters() {
+  auditFilters.query = '';
+  auditFilters.action = '';
+  auditFilters.status = '';
+  auditFilters.limit = 25;
+  auditFilters.offset = 0;
+  await loadAuditLogs();
+}
+
+async function changeAuditPage(direction: -1 | 1) {
+  const nextOffset = auditFilters.offset + direction * auditFilters.limit;
+  if (nextOffset < 0 || nextOffset >= auditTotal.value) return;
+  auditFilters.offset = nextOffset;
+  await loadAuditLogs();
+}
+
+async function changeAuditPageSize() {
+  auditFilters.offset = 0;
+  await loadAuditLogs();
 }
 
 async function loadPastSemesterStatus(silent = false) {
@@ -398,7 +508,7 @@ async function createAccountForTeacher() {
         teacher_uuid: accountTarget.uuid,
       })
     });
-    setStatus('success', `Аккаунт создан: ${accountTarget.username} / ${accountTarget.password}`);
+    setStatus('success', `Аккаунт создан: ${accountTarget.username} / ${accountTarget.password}. При первом входе пароль нужно будет сменить.`);
     showAccountModal.value = false;
     await reloadAll();
   } catch (error) { setStatus('error', errorText(error, 'Ошибка создания аккаунта.')); }
@@ -534,6 +644,33 @@ function formatDateTime(value: string | null) {
 
 function formatDateOnly(value: string | null) {
   return value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' }).format(new Date(value)) : '—';
+}
+
+function getAuditActorName(actorUserId: number | null) {
+  if (!actorUserId) return 'Система';
+  const user = users.value.find((item) => item.id === actorUserId);
+  if (!user) return `ID:${actorUserId}`;
+  return user.fullName || user.username;
+}
+
+function getAuditActionLabel(action: string) {
+  return AUDIT_ACTION_LABELS[action] ?? action;
+}
+
+function getAuditTargetLabel(log: AuditLogItem) {
+  if (!log.targetType && !log.targetId) return '—';
+  if (!log.targetType) return log.targetId ?? '—';
+  return log.targetId ? `${log.targetType}:${log.targetId}` : log.targetType;
+}
+
+function formatAuditDetails(details: Record<string, unknown> | null) {
+  if (!details) return '—';
+  const entries = Object.entries(details).filter(([, value]) => value !== null && value !== undefined && value !== '');
+  if (entries.length === 0) return '—';
+  return entries
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+    .join(' | ');
 }
 
 onMounted(() => {
@@ -919,6 +1056,132 @@ onMounted(() => {
               <p v-if="item.kind === 'snapshot'">Фиксация: {{ formatDateTime(item.capturedAt) }} | Создан: {{ formatDateTime(item.createdAt) }}</p>
             </div>
             <button v-if="item.deletePath" @click="deleteEntity(item.deletePath, 'Снимок удалён')" class="mt-3 text-red-500 font-bold text-xs hover:text-red-700">Удалить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== AUDIT TAB ==================== -->
+    <div v-if="activeTab === 'audit'" class="space-y-6">
+      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-xl font-black text-slate-950 dark:text-white">Журнал действий</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">
+              Поиск по пользователю, действию, объекту, IP и деталям. Сейчас найдено {{ auditTotal }} записей.
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] px-4 py-3 text-sm">
+            <div class="text-slate-500 dark:text-slate-400">Показано</div>
+            <div class="font-bold text-slate-900 dark:text-white">{{ auditPageStart }}-{{ auditPageEnd }} из {{ auditTotal }}</div>
+          </div>
+        </div>
+
+        <form class="grid gap-3 mb-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_12rem_9rem_auto_auto]" @submit.prevent="applyAuditFilters">
+          <input
+            v-model="auditFilters.query"
+            type="text"
+            placeholder="Поиск по пользователю, объекту, IP, деталям..."
+            class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm dark:text-white"
+          />
+          <select v-model="auditFilters.action" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm dark:text-white">
+            <option value="">Все действия</option>
+            <option v-for="item in auditActionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
+          <select v-model="auditFilters.status" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm dark:text-white">
+            <option value="">Любой статус</option>
+            <option value="SUCCESS">Только успешные</option>
+            <option value="FAILURE">Только ошибки</option>
+          </select>
+          <select v-model.number="auditFilters.limit" class="h-11 px-4 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm dark:text-white" @change="changeAuditPageSize">
+            <option :value="25">25 на странице</option>
+            <option :value="50">50 на странице</option>
+            <option :value="100">100 на странице</option>
+          </select>
+          <button type="submit" :disabled="auditLoading" class="h-11 px-5 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-sm font-black disabled:opacity-60">
+            {{ auditLoading ? 'Поиск...' : 'Применить' }}
+          </button>
+          <button type="button" :disabled="auditLoading || !hasAuditFilters" @click="resetAuditFilters" class="h-11 px-5 rounded-2xl border border-slate-300 dark:border-white/10 text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50">
+            Сбросить
+          </button>
+        </form>
+
+        <div v-if="auditLoading" class="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+          Загружаю журнал действий...
+        </div>
+
+        <div v-else-if="auditLogs.length === 0" class="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+          {{ hasAuditFilters ? 'По текущим фильтрам ничего не найдено.' : 'Журнал пока пуст.' }}
+        </div>
+
+        <div v-else class="space-y-3">
+          <article
+            v-for="log in auditLogs"
+            :key="log.id"
+            class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 p-5"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                    :class="log.status === 'SUCCESS'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'"
+                  >
+                    {{ log.status === 'SUCCESS' ? 'Успешно' : 'Ошибка' }}
+                  </span>
+                  <span class="text-xs text-slate-500 dark:text-slate-400">{{ formatDateTime(log.createdAt) }}</span>
+                </div>
+                <h3 class="text-base font-black text-slate-900 dark:text-white">
+                  {{ getAuditActionLabel(log.action) }}
+                </h3>
+                <p class="text-sm text-slate-600 dark:text-slate-300">
+                  Инициатор: <span class="font-semibold text-slate-900 dark:text-white">{{ getAuditActorName(log.actorUserId) }}</span>
+                  <span class="text-slate-400"> • </span>
+                  Объект: {{ getAuditTargetLabel(log) }}
+                </p>
+              </div>
+              <div class="text-right text-xs text-slate-500 dark:text-slate-400">
+                <div>ID события: {{ log.id }}</div>
+                <div v-if="log.targetType">{{ log.targetType }}</div>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <div class="rounded-2xl bg-slate-50 dark:bg-white/[0.03] px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Детали</div>
+                <div class="mt-1 text-sm text-slate-700 dark:text-slate-200 break-words">{{ formatAuditDetails(log.details) }}</div>
+              </div>
+              <div class="rounded-2xl bg-slate-50 dark:bg-white/[0.03] px-4 py-3 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+                <div><span class="font-semibold text-slate-900 dark:text-white">IP:</span> {{ log.ipAddress || '—' }}</div>
+                <div><span class="font-semibold text-slate-900 dark:text-white">User-Agent:</span> {{ log.userAgent || '—' }}</div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div v-if="auditTotalPages > 1" class="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div class="text-sm text-slate-500 dark:text-slate-400">
+            Страница {{ auditCurrentPage }} из {{ auditTotalPages }}
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              @click="changeAuditPage(-1)"
+              :disabled="auditLoading || auditFilters.offset === 0"
+              class="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50"
+            >
+              Назад
+            </button>
+            <button
+              type="button"
+              @click="changeAuditPage(1)"
+              :disabled="auditLoading || auditFilters.offset + auditFilters.limit >= auditTotal"
+              class="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50"
+            >
+              Дальше
+            </button>
           </div>
         </div>
       </div>

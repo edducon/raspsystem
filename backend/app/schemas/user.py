@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool = True
+    must_change_password: bool = False
     department_id: int | None = None
     department_ids: list[int] = Field(default_factory=list)
     teacher_uuid: str | None = None
@@ -20,6 +21,7 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(UserBase):
+    must_change_password: bool | None = None
     password: str | None = None
 
 
@@ -29,6 +31,7 @@ class UserRead(UserBase):
     id: int
     full_name: Annotated[str, Field(serialization_alias="fullName")]
     is_active: Annotated[bool, Field(serialization_alias="isActive")]
+    must_change_password: Annotated[bool, Field(default=False, serialization_alias="mustChangePassword")]
     department_id: Annotated[int | None, Field(default=None, serialization_alias="departmentId")]
     department_ids: Annotated[list[int], Field(default_factory=list, serialization_alias="departmentIds")]
     teacher_uuid: Annotated[str | None, Field(default=None, serialization_alias="teacherUuid")]

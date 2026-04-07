@@ -7,6 +7,7 @@ export interface Props {
 
 const { title } = Astro.props;
 const currentYear = new Date().getFullYear();
+const csrfToken = Astro.locals.csrfToken ?? "";
 ---
 
 <!DOCTYPE html>
@@ -14,6 +15,7 @@ const currentYear = new Date().getFullYear();
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="backend-csrf-token" content={csrfToken} />
     <title>{title}</title>
     <script is:inline>
         const theme = (() => {
@@ -120,6 +122,10 @@ const currentYear = new Date().getFullYear();
 </footer>
 
 <script is:inline>
+    window.__BACKEND_CSRF_TOKEN__ = document
+        .querySelector('meta[name="backend-csrf-token"]')
+        ?.getAttribute('content') ?? '';
+
     const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
     const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
     const themeToggleBtn = document.getElementById('theme-toggle');

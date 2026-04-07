@@ -4,9 +4,15 @@ export interface BackendAuthUser {
     fullName: string;
     role: "ADMIN" | "EMPLOYEE" | "TEACHER";
     isActive: boolean;
+    mustChangePassword: boolean;
     departmentId: number | null;
     departmentIds: number[];
     teacherUuid: string | null;
+}
+
+export interface BackendSessionState {
+    user: BackendAuthUser;
+    csrfToken: string;
 }
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
@@ -19,7 +25,7 @@ export function getServerBackendApiUrl(): string {
     return stripTrailingSlash(import.meta.env.BACKEND_INTERNAL_API_URL ?? getPublicBackendApiUrl());
 }
 
-export async function fetchCurrentUser(request: Request): Promise<BackendAuthUser | null> {
+export async function fetchCurrentSession(request: Request): Promise<BackendSessionState | null> {
     const cookie = request.headers.get("cookie");
     if (!cookie) {
         return null;
@@ -36,5 +42,5 @@ export async function fetchCurrentUser(request: Request): Promise<BackendAuthUse
         return null;
     }
 
-    return (await response.json()) as BackendAuthUser;
+    return (await response.json()) as BackendSessionState;
 }

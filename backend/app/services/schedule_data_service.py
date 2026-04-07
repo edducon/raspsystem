@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import TeacherLocal
+from app.models import TeacherLocal, User
 from app.services.reference_schedule_service import ReferenceScheduleService
 from app.services.raspyx_service import RaspyxService
 
@@ -57,12 +57,18 @@ class ScheduleDataService:
         subjects.sort(key=lambda item: item["name"])
         return {"groups": groups, "subjects": subjects}
 
-    def get_teacher_schedule(self, teacher_uuid: str) -> dict:
+    def get_teacher_schedule(self, teacher_uuid: str, viewer: User) -> dict:
         teacher = self.db.get(TeacherLocal, teacher_uuid)
         if teacher is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Преподаватель из справочника не найден.",
+                detail="РџСЂРµРїРѕРґР°РІР°С‚РµР»СЊ РёР· СЃРїСЂР°РІРѕС‡РЅРёРєР° РЅРµ РЅР°Р№РґРµРЅ.",
+            )
+
+        if viewer.role != "ADMIN" and viewer.teacher_uuid != teacher_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Р”РѕСЃС‚СѓРї Рє СЂР°СЃРїРёСЃР°РЅРёСЋ СЂР°Р·СЂРµС€С‘РЅ С‚РѕР»СЊРєРѕ РґР»СЏ СЃРѕР±СЃС‚РІРµРЅРЅРѕР№ СѓС‡С‘С‚РЅРѕР№ Р·Р°РїРёСЃРё.",
             )
 
         schedule = (

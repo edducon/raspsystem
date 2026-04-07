@@ -40,6 +40,7 @@ class UserService:
             password_hash=hash_password(data.password),
             role=data.role,
             is_active=data.is_active,
+            must_change_password=True,
             department_id=data.department_id,
             department_ids=department_ids,
             teacher_uuid=teacher_uuid,
@@ -74,8 +75,11 @@ class UserService:
         user.department_id = data.department_id
         user.department_ids = department_ids
         user.teacher_uuid = teacher_uuid
+        if data.must_change_password is not None:
+            user.must_change_password = data.must_change_password
         if data.password:
             user.password_hash = hash_password(data.password)
+            user.must_change_password = True
         self.db.commit()
         self.db.refresh(user)
         return user
