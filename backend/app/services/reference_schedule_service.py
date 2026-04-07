@@ -104,7 +104,7 @@ class ReferenceScheduleService:
         group_uuids = {
             str(group.get("uuid"))
             for group in (snapshot.groups or [])
-            if str(group.get("number") or "").strip() == group_number
+            if self._extract_group_number(group) == group_number
         }
         if not group_uuids:
             return {}
@@ -194,7 +194,7 @@ class ReferenceScheduleService:
                     },
                     "group": {
                         "uuid": str(group.get("uuid") or ""),
-                        "number": str(group.get("number") or ""),
+                        "number": self._extract_group_number(group),
                         "name": str(group.get("name") or ""),
                     },
                     "subject_type": {
@@ -215,3 +215,13 @@ class ReferenceScheduleService:
             weekday: {slot: list(items) for slot, items in slots.items()}
             for weekday, slots in root.items()
         }
+
+    def _extract_group_number(self, group: object) -> str:
+        if not isinstance(group, dict):
+            return ""
+
+        for key in ("number", "group_number", "name"):
+            candidate = str(group.get(key) or "").strip()
+            if candidate:
+                return candidate
+        return ""

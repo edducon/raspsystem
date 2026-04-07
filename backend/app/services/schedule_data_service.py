@@ -16,14 +16,7 @@ class ScheduleDataService:
 
     def get_dictionaries(self) -> dict:
         if self.reference_schedule.has_reference_snapshot():
-            groups = [
-                {
-                    "uuid": str(item.get("uuid") or ""),
-                    "number": str(item.get("number") or ""),
-                }
-                for item in self.reference_schedule.list_groups()
-                if item.get("uuid") and item.get("number")
-            ]
+            groups = self._normalize_groups(self.reference_schedule.list_groups())
             subjects = [
                 {
                     "uuid": str(item.get("uuid") or ""),
@@ -36,14 +29,7 @@ class ScheduleDataService:
             subjects.sort(key=lambda item: item["name"])
             return {"groups": groups, "subjects": subjects}
 
-        groups = [
-            {
-                "uuid": str(item.get("uuid") or ""),
-                "number": str(item.get("number") or ""),
-            }
-            for item in self._result_items(self.raspyx.get_groups())
-            if item.get("uuid") and item.get("number")
-        ]
+        groups = self._normalize_groups(self._result_items(self.raspyx.get_groups()))
         subjects = [
             {
                 "uuid": str(item.get("uuid") or ""),
@@ -87,6 +73,32 @@ class ScheduleDataService:
             return []
         result = payload.get("result") or payload.get("response") or []
         return result if isinstance(result, list) else []
+
+    def _normalize_groups(self, raw_groups: list[dict]) -> list[dict[str, str]]:
+        normalized: list[dict[str, str]] = []
+        seen_uuids: set[str] = set()
+
+        for item in raw_groups:
+            uuid = str(item.get("uuid") or "").strip()
+            number = self._extract_group_number(item)
+            if not uuid or not number or uuid in seen_uuids:
+                continue
+
+            normalized.append({"uuid": uuid, "number": number})
+            seen_uuids.add(uuid)
+
+        normalized.sort(key=lambda item: item["number"])
+        return normalized
+
+    def _extract_group_number(self, group: object) -> str:
+        if not isinstance(group, dict):
+            return ""
+
+        for key in ("number", "group_number", "name"):
+            candidate = str(group.get(key) or "").strip()
+            if candidate:
+                return candidate
+        return ""
 
     def _schedule_root(self, payload: object) -> dict[str, object]:
         if not isinstance(payload, dict):

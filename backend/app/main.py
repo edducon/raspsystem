@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic.warnings import UnsupportedFieldAttributeWarning
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.models  # noqa: F401
@@ -31,6 +32,26 @@ app = FastAPI(
     redoc_url="/redoc" if settings.are_api_docs_enabled else None,
     openapi_url="/openapi.json" if settings.are_api_docs_enabled else None,
 )
+
+
+class RequestHardeningMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            if should_validate_unsafe_api_request(request):
+                enforce_trusted_request_origin(request)
+                enforce_csrf_token(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+        response = await call_next(request)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        return response
+
+
+app.add_middleware(RequestHardeningMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
@@ -48,23 +69,6 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
 )
 app.include_router(api_router, prefix=settings.api_prefix)
-
-
-@app.middleware("http")
-async def harden_requests(request: Request, call_next):
-    try:
-        if should_validate_unsafe_api_request(request):
-            enforce_trusted_request_origin(request)
-            enforce_csrf_token(request)
-    except HTTPException as exc:
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
-
-    response = await call_next(request)
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    return response
 
 
 @app.exception_handler(RequestValidationError)

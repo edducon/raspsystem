@@ -93,7 +93,7 @@ export async function fetchBackendFromBrowser<T>(
     credentials: "include",
   });
 
-  return parseBackendResponse<T>(response, "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕСЃ Рє СЃРµСЂРІРµСЂСѓ.");
+  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
 }
 
 export async function fetchBackendFromServer<T>(
@@ -114,5 +114,5 @@ export async function fetchBackendFromServer<T>(
     headers,
   });
 
-  return parseBackendResponse<T>(response, "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕСЃ Рє СЃРµСЂРІРµСЂСѓ.");
+  return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
 }

@@ -360,7 +360,7 @@ class RetakeAdminService:
     def _extract_group_number(self, group: object) -> str:
         if not isinstance(group, dict):
             return ""
-        return str(group.get("number") or group.get("group_number") or "").strip()
+        return str(group.get("number") or group.get("group_number") or group.get("name") or "").strip()
 
     def _extract_pair_group_name(self, pair: dict, fallback_group_name: str) -> str:
         group = pair.get("group")

@@ -64,19 +64,21 @@ if (hasOwnSchedule) {
 
         teacherRetakesFormatted = myRetakes.map((retake: any) => ({
             ...retake,
-            groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РіСЂСѓРїРїР°',
-            subjectName: cleanSubjectName(retake.subjectName || apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РґРёСЃС†РёРїР»РёРЅР°'),
+            groupName: apiGroups.find((group: any) => group.uuid === retake.groupUuid)?.number || 'Неизвестная группа',
+            subjectName: cleanSubjectName(
+                retake.subjectName || apiSubjects.find((subject: any) => subject.uuid === retake.subjectUuid)?.name || 'Неизвестная дисциплина',
+            ),
         }));
     } catch (error) {
         console.error('Failed to load teacher retakes', error);
     }
 }
 
-const roleLabel = isAdmin ? 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ' : isEmployee ? 'РЎРѕС‚СЂСѓРґРЅРёРє' : 'РџСЂРµРїРѕРґР°РІР°С‚РµР»СЊ';
+const roleLabel = isAdmin ? 'Администратор' : isEmployee ? 'Сотрудник' : 'Преподаватель';
 const backendApiUrl = getPublicBackendApiUrl();
 const csrfToken = Astro.locals.csrfToken ?? '';
 ---
-<Layout title="Р Р°Р±РѕС‡РёР№ СЃС‚РѕР»">
+<Layout title="Рабочий стол">
     <Fragment slot="nav-center">
         <div class="hidden sm:flex items-center gap-2 min-w-0">
             <span class="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
@@ -91,14 +93,14 @@ const csrfToken = Astro.locals.csrfToken ?? '';
     <Fragment slot="nav-actions">
         {isAdmin && (
             <a href="/admin" class="text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800/50 px-3 py-1.5 rounded-xl hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-all">
-                РђРґРјРёРЅРєР°
+                Админка
             </a>
         )}
         <a href="/profile" class="text-xs font-medium text-gray-700 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-all">
-            РџСЂРѕС„РёР»СЊ
+            Профиль
         </a>
         <button id="logout-btn" class="text-xs font-medium text-gray-700 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-rose-950/30 transition-all">
-            Р’С‹Р№С‚Рё
+            Выйти
         </button>
     </Fragment>
 
@@ -108,10 +110,10 @@ const csrfToken = Astro.locals.csrfToken ?? '';
                 Backend API
             </p>
             <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                Р Р°Р±РѕС‡РёР№ РєР°Р±РёРЅРµС‚
+                Рабочий кабинет
             </h1>
             <p class="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-7">
-                РЎРµСЃСЃРёСЏ Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РѕРїСЂРµРґРµР»СЏСЋС‚СЃСЏ С‡РµСЂРµР· backend FastAPI. Р¤СЂРѕРЅС‚РµРЅРґ РёСЃРїРѕР»СЊР·СѓРµС‚ С‚РѕР»СЊРєРѕ UI Рё backend session cookie.
+                Сессия и пользователь определяются через backend FastAPI. Фронтенд использует только UI и backend session cookie.
             </p>
         </div>
 
@@ -119,10 +121,10 @@ const csrfToken = Astro.locals.csrfToken ?? '';
             <div class="mb-6 overflow-x-auto hide-scrollbar">
                 <div class="inline-flex p-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <a href="?tab=schedule" class={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${activeTab === 'schedule' ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                        РњРѕС‘ СЂР°СЃРїРёСЃР°РЅРёРµ
+                        Моё расписание
                     </a>
                     <a href="?tab=retakes" class={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${activeTab === 'retakes' ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                        РќР°Р·РЅР°С‡РµРЅРёРµ РїРµСЂРµСЃРґР°С‡
+                        Назначение пересдач
                     </a>
                 </div>
             </div>

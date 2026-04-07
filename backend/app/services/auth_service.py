@@ -17,7 +17,7 @@ class AuthService:
         if user is None or not user.is_active or not verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="РќРµРІРµСЂРЅС‹Р№ Р»РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ.",
+                detail="Неверный логин или пароль.",
             )
         return user
 
@@ -27,7 +27,7 @@ class AuthService:
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ.",
+                detail="Требуется авторизация.",
             )
 
         user = self.db.get(User, user_id)
@@ -35,14 +35,14 @@ class AuthService:
             request.session.clear()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ.",
+                detail="Требуется авторизация.",
             )
 
         if session_version != user.session_version:
             request.session.clear()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="РЎРµСЃСЃРёСЏ Р±С‹Р»Р° РѕР±РЅРѕРІР»РµРЅР°. Р’РѕР№РґРёС‚Рµ РїРѕРІС‚РѕСЂРЅРѕ.",
+                detail="Сессия была обновлена. Войдите повторно.",
             )
 
         if not request.session.get("csrf_token"):
@@ -65,7 +65,7 @@ class AuthService:
         if not verify_password(current_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="РўРµРєСѓС‰РёР№ РїР°СЂРѕР»СЊ СѓРєР°Р·Р°РЅ РЅРµРІРµСЂРЅРѕ.",
+                detail="Текущий пароль указан неверно.",
             )
 
         user.password_hash = hash_password(new_password)

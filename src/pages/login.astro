@@ -80,6 +80,9 @@ const backendApiUrl = getPublicBackendApiUrl();
         const form = document.querySelector('#login-form');
         const errorDiv = document.querySelector('#error-message');
         const submitBtn = document.querySelector('#submit-btn');
+        const csrfToken = document
+            .querySelector('meta[name="backend-csrf-token"]')
+            ?.getAttribute('content') ?? '';
 
         form?.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -97,6 +100,7 @@ const backendApiUrl = getPublicBackendApiUrl();
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
+                    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
                 },
                 body: JSON.stringify({
                     username: formData.get('username'),

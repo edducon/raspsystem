@@ -8,6 +8,9 @@ from app.core.config import settings
 
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+CSRF_EXEMPT_PATHS = {
+    f"{settings.api_prefix}/auth/login",
+}
 
 
 def should_validate_unsafe_api_request(request: Request) -> bool:
@@ -33,6 +36,8 @@ def enforce_trusted_request_origin(request: Request) -> None:
 
 def enforce_csrf_token(request: Request) -> None:
     if request.method.upper() in SAFE_METHODS:
+        return
+    if request.url.path in CSRF_EXEMPT_PATHS:
         return
 
     session_user_id = request.session.get("user_id")
