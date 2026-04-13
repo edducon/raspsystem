@@ -13,6 +13,8 @@ from app.schemas.schedule_snapshot import (
     ScheduleSnapshotListRead,
     ScheduleSnapshotRead,
 )
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from app.services.raspyx_service import RaspyxService
 
 
 DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -261,3 +263,157 @@ class ScheduleSnapshotService:
 
         visit(value)
         return result
+
+    def sync_from_raspyx(self) -> ScheduleSnapshotRead:
+        # =======================================================
+        # 2. УМНЫЙ КАЛЕНДАРЬ: Автоматически вычисляем границы семестра
+        # =======================================================
+        now = datetime.now(UTC)
+        if 2 <= now.month <= 7:
+            # С февраля по июль — Весенний семестр
+            sem_start = f"{now.year}-02-09"
+            sem_end = f"{now.year}-07-15"
+            sem_label = f"Весенний семестр {now.year}"
+        else:
+            # С августа по январь — Осенний семестр
+            start_year = now.year if now.month >= 8 else now.year - 1
+            sem_start = f"{start_year}-09-01"
+            sem_end = f"{start_year + 1}-01-31"
+            sem_label = f"Осенний семестр {start_year}/{start_year + 1}"
+
+        raspyx = RaspyxService()
+
+        # 3. Получаем список групп
+        groups_payload = raspyx.get_groups()
+        raw_groups = groups_payload.get("result") or groups_payload.get("response") or []
+
+        # Собираем словари для JSON (нам нужны UUID и номера групп)
+        groups = []
+        group_numbers = []
+        for g in raw_groups:
+            num = str(g.get("number") or g.get("name") or "").strip()
+            guid = str(g.get("uuid") or g.get("id") or "").strip()
+            if num and guid:
+                groups.append({"uuid": guid, "number": num})
+                group_numbers.append(num)
+
+        # Словари для уникальных преподавателей и предметов
+        subjects_map = {}
+        teachers_map = {}
+        schedule_items = []
+
+        # 4. Многопоточно скачиваем расписание для всех групп
+        max_workers = min(8, len(group_numbers))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_group = {
+                executor.submit(raspyx.get_group_schedule, num): num
+                for num in group_numbers
+            }
+
+            for future in as_completed(future_to_group):
+                group_num = future_to_group[future]
+                try:
+                    schedule_payload = future.result()
+                    raw_schedule = schedule_payload.get("result") or schedule_payload.get("response") or {}
+
+                    # Ищем UUID группы для привязки
+                    group_uuid = next((g["uuid"] for g in groups if g["number"] == group_num), None)
+                    if not group_uuid:
+                        continue
+
+                    # Парсим дни и пары
+                    for date_str, day_data in raw_schedule.items():
+                        if not isinstance(day_data, dict):
+                            continue
+
+                        # По умолчанию назначаем паре рамки всего семестра из умного календаря!
+                        actual_start = sem_start
+                        actual_end = sem_end
+                        weekday = 1
+
+                        # Проверяем, является ли ключ точной датой (ГГГГ-ММ-ДД) или днем недели ("friday")
+                        if re.fullmatch(r"^\d{4}-\d{2}-\d{2}$", str(date_str).strip()):
+                            try:
+                                dt = datetime.strptime(str(date_str).strip(), "%Y-%m-%d")
+                                weekday = dt.weekday() + 1
+                                # Если Raspyx вдруг отдал точную дату (например, экзамен), используем её
+                                actual_start = str(date_str).strip()
+                                actual_end = str(date_str).strip()
+                            except ValueError:
+                                pass
+                        else:
+                            # Если это день недели текстом, превращаем его в цифру
+                            weekdays_map = {
+                                "monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4,
+                                "friday": 5, "saturday": 6, "sunday": 7,
+                                "понедельник": 1, "вторник": 2, "среда": 3, "четверг": 4,
+                                "пятница": 5, "суббота": 6, "воскресенье": 7
+                            }
+                            weekday = weekdays_map.get(str(date_str).lower().strip(), 1)
+
+                        for pairs in day_data.values():
+                            if not isinstance(pairs, list):
+                                continue
+
+                            for pair in pairs:
+                                # Извлекаем предмет
+                                subj_raw = pair.get("subject", {})
+                                subj_name = str(
+                                    subj_raw.get("name") or pair.get("subject_name") or "Неизвестно").strip()
+                                subj_uuid = str(subj_raw.get("uuid") or subj_name)
+                                subjects_map[subj_uuid] = {"uuid": subj_uuid, "name": subj_name}
+
+                                # Извлекаем преподавателей
+                                teacher_uuids = []
+                                for t in pair.get("teachers") or []:
+                                    t_name = str(t.get("full_name") or t.get("fio") or t).strip()
+                                    t_uuid = str(t.get("uuid") or t_name)
+                                    teachers_map[t_uuid] = {"uuid": t_uuid, "full_name": t_name}
+                                    teacher_uuids.append(t_uuid)
+
+                                # Формируем занятие
+                                schedule_items.append({
+                                    "start_date": actual_start, # <-- Заполняем вычисленными датами!
+                                    "end_date": actual_end,     # <-- Заполняем вычисленными датами!
+                                    "weekday": weekday,
+                                    "slot": pair.get("pair_number") or 1,
+                                    "group_uuid": group_uuid,
+                                    "subject_uuid": subj_uuid,
+                                    "teacher_uuids": teacher_uuids
+                                })
+                except Exception as e:
+                    print(f"Ошибка при загрузке расписания группы {group_num}: {e}")
+
+        # 5. Формируем DTO для создания нового снимка
+        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
+        snapshot_data = ScheduleSnapshotCreate(
+            name=f"Синхронизация Raspyx от {now_str}",
+            semester_label=sem_label,
+            status="active",
+            source_type="raspyx",
+            is_reference_for_retakes=True,
+            groups=groups,
+            subjects=list(subjects_map.values()),
+            teachers=list(teachers_map.values()),
+            schedule_items=schedule_items
+        )
+
+        # 6. ПРИНИМАЕМ РЕШЕНИЕ: Обновить или Архивировать?
+        current_reference = self.db.scalar(
+            select(ScheduleSnapshot).where(ScheduleSnapshot.is_reference_for_retakes.is_(True))
+        )
+
+        if current_reference and current_reference.semester_label == sem_label:
+            # Это тот же самый семестр! Просто перезаписываем данные (пары, группы и т.д.)
+            print(f"[Sync] Обновляем существующий {sem_label} (ID: {current_reference.id})")
+            return self.update_snapshot(current_reference.id, snapshot_data)
+        else:
+            # Это переход на новый семестр. Архивируем старый и создаем новый.
+            if current_reference:
+                print(f"[Sync] Архивируем прошлый семестр: {current_reference.semester_label}")
+                current_reference.is_reference_for_retakes = False
+                current_reference.status = "archived"
+                # Изменения сохранятся в базе при вызове create_snapshot
+
+            print(f"[Sync] Создаем абсолютно новый {sem_label}")
+            return self.create_snapshot(snapshot_data)

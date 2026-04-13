@@ -10,6 +10,14 @@ from app.services.schedule_snapshot_service import ScheduleSnapshotService
 router = APIRouter(prefix="/schedule-snapshots", tags=["schedule-snapshots"])
 
 
+@router.post("/sync", response_model=ScheduleSnapshotRead)
+def sync_schedule_from_raspyx(db: Session = Depends(get_db)):
+    """
+    Скачивает всё текущее расписание из Raspyx и создает активный снимок.
+    """
+    service = ScheduleSnapshotService(db)
+    return service.sync_from_raspyx()
+
 @router.get("/", response_model=list[ScheduleSnapshotListRead])
 def list_snapshots(
     _: object = Depends(require_admin),

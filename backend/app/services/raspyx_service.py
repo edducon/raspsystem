@@ -81,7 +81,8 @@ class RaspyxService:
                     "password": settings.raspyx_password,
                 },
             )
-        except Exception:
+        except Exception as e:
+            print(f"!!! ОШИБКА АВТОРИЗАЦИИ: {e}")
             return "offline_mock_token"
 
         token = None

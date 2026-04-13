@@ -97,7 +97,7 @@ const busy = reactive({
   position: false,
   syncTeachers: false,
   importPastSemester: false,
-  importCurrentSemesterAsPast: false,
+  syncSchedule: false,
   createAccount: '' as string,
   updateTeacherPosition: '' as string,
 });
@@ -555,30 +555,26 @@ async function handlePastSemesterFile(event: Event) {
   finally { busy.importPastSemester = false; input.value = ''; }
 }
 
-async function importCurrentSemesterAsPast() {
-  if (!window.confirm('Это действие заменит локальные данные прошлого семестра тестовым импортом из текущего API 2.0.0. Продолжить?')) {
+async function syncCurrentSchedule() {
+  if (!window.confirm('Скачать текущее расписание из внешнего API (Raspyx)? Это может занять около минуты. Расписание будет установлено как активный семестр.')) {
     return;
   }
 
-  busy.importCurrentSemesterAsPast = true;
+  busy.syncSchedule = true;
   try {
-    const result = await fetchBackendFromBrowser<any>(props.backendApiUrl, '/retakes/admin/past-semester/import-current', {
+    // Вызываем наш новый эндпоинт
+    await fetchBackendFromBrowser<any>(props.backendApiUrl, '/schedule-snapshots/sync', {
       method: 'POST',
     });
 
-    pastSemesterInfo.value = {
-      imported: result.importedRecords ?? result.imported_records ?? 0,
-      groups: result.uniqueGroups ?? result.unique_groups ?? 0,
-      subjects: result.uniqueSubjects ?? result.unique_subjects ?? 0,
-      dateRangeStart: result.dateRangeStart ?? result.date_range_start ?? null,
-      dateRangeEnd: result.dateRangeEnd ?? result.date_range_end ?? null,
-    };
-    setStatus('success', result.message || 'Текущий семестр сохранён как прошлый.');
-    await loadPastSemesterStatus(true);
+    setStatus('success', 'Текущее расписание успешно загружено и установлено как активное!');
+
+    // Перезагружаем все данные на странице, чтобы новый снимок появился в списке
+    await reloadAll();
   } catch (error) {
-    setStatus('error', errorText(error, 'Не удалось сохранить текущий семестр как прошлый.'));
+    setStatus('error', errorText(error, 'Не удалось синхронизировать расписание из Raspyx.'));
   } finally {
-    busy.importCurrentSemesterAsPast = false;
+    busy.syncSchedule = false;
   }
 }
 
@@ -1031,8 +1027,8 @@ onMounted(() => {
           </div>
           <div class="flex flex-wrap gap-2">
             <input ref="pastSemesterFileInput" type="file" accept=".json" class="hidden" @change="handlePastSemesterFile" />
-            <button @click="importCurrentSemesterAsPast" :disabled="busy.importCurrentSemesterAsPast" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
-              {{ busy.importCurrentSemesterAsPast ? '⏳ Сборка...' : '↺ Сделать текущий прошлым' }}
+            <button @click="syncCurrentSchedule" :disabled="busy.syncSchedule" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
+              {{ busy.syncSchedule ? '⏳ Скачивание из API...' : '🔄 Скачать текущий семестр' }}
             </button>
             <button @click="triggerPastSemesterUpload" :disabled="busy.importPastSemester" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
               {{ busy.importPastSemester ? '⏳ Импорт...' : '📂 Загрузить schedules.json' }}
