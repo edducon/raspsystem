@@ -185,14 +185,11 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     :root {
         color-scheme: light;
         --page-bg:
-                radial-gradient(circle at 15% 18%, rgba(239, 68, 68, 0.12), transparent 24%),
-                radial-gradient(circle at 82% 12%, rgba(59, 130, 246, 0.12), transparent 22%),
-                radial-gradient(circle at 50% 100%, rgba(15, 23, 42, 0.06), transparent 28%),
-                linear-gradient(180deg, #f4f4f5 0%, #eceef3 42%, #e8ebf2 100%);
-        --shell-bg: rgba(255, 255, 255, 0.58);
-        --shell-border: rgba(255, 255, 255, 0.45);
-        --shell-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
-        --footer-bg: rgba(255, 255, 255, 0.42);
+                linear-gradient(180deg, #f7f7fa 0%, #eef1f6 46%, #e9edf5 100%);
+        --shell-bg: rgba(255, 255, 255, 0.72);
+        --shell-border: rgba(255, 255, 255, 0.56);
+        --shell-shadow: 0 20px 60px rgba(15, 23, 42, 0.10);
+        --footer-bg: transparent;
         --text-main: #0f172a;
         --text-soft: rgba(15, 23, 42, 0.62);
     }
@@ -200,14 +197,11 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     html.dark {
         color-scheme: dark;
         --page-bg:
-                radial-gradient(circle at 15% 18%, rgba(239, 68, 68, 0.18), transparent 24%),
-                radial-gradient(circle at 82% 12%, rgba(59, 130, 246, 0.14), transparent 22%),
-                radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.04), transparent 28%),
-                linear-gradient(180deg, #0a0a0c 0%, #111216 45%, #151821 100%);
+                linear-gradient(180deg, #0b0d11 0%, #10141a 50%, #0e1016 100%);
         --shell-bg: rgba(14, 16, 22, 0.64);
         --shell-border: rgba(255, 255, 255, 0.08);
         --shell-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
-        --footer-bg: rgba(14, 16, 22, 0.56);
+        --footer-bg: transparent;
         --text-main: #ffffff;
         --text-soft: rgba(255, 255, 255, 0.62);
     }
@@ -231,15 +225,11 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         inset: 0;
         z-index: 0;
         pointer-events: none;
-        background:
-                linear-gradient(to bottom, rgba(0, 0, 0, 0.22), transparent 22%),
-                linear-gradient(to top, rgba(0, 0, 0, 0.1), transparent 28%);
+        background: none;
     }
 
-    html:not(.dark) .page-bg {
-        background:
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.18), transparent 18%),
-                linear-gradient(to top, rgba(15, 23, 42, 0.04), transparent 22%);
+    html.dark .page-bg {
+        background: none;
     }
 
     .page-noise {
@@ -247,10 +237,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         inset: 0;
         z-index: 0;
         pointer-events: none;
-        opacity: 0.045;
-        mix-blend-mode: soft-light;
-        background-image:
-                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+        opacity: 0.03;
+        mix-blend-mode: normal;
     }
 
     .nav-shell {
@@ -343,14 +331,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     .footer-shell {
         border: 1px solid var(--shell-border);
         background: var(--footer-bg);
-        box-shadow: var(--shell-shadow);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
         border-radius: 22px;
-        transition:
-                background-color 0.35s ease,
-                border-color 0.35s ease,
-                box-shadow 0.35s ease;
     }
 
     .footer-link {

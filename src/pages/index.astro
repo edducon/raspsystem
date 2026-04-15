@@ -71,39 +71,41 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
                 </defs>
                 <path
                         class="arc-base arc-base-left"
-                        d="M -120 38
-                       C 260 52, 590 205, 820 470
-                       C 960 632, 1045 840, 1125 1110"
+                        d="M 800 1180
+                        C 700 900, 560 580, 420 340
+                        C 260 120, 60 20, -200 20"
                 />
                 <path
                         class="arc-base arc-base-right"
-                        d="M 1122 1110
-                       C 1148 965, 1198 835, 1288 724
-                       C 1368 626, 1478 560, 1638 520"
+                        d="M 800 1180
+                       C 880 920, 1020 720, 1180 560
+                       C 1350 420, 1500 340, 1650 300"
                 />
+
                 <path
                         class="arc-trace arc-trace-left"
-                        d="M 1125 1110
-                       C 1045 840, 960 632, 820 470
-                       C 590 205, 260 52, -120 38"
+                        d="M 800 1180
+                        C 700 900, 560 580, 420 340
+                        C 260 120, 60 20, -200 20"
                 />
                 <path
                         class="arc-trace arc-trace-right"
-                        d="M 1122 1110
-                       C 1148 965, 1198 835, 1288 724
-                       C 1368 626, 1478 560, 1638 520"
+                        d="M 800 1180
+                       C 880 920, 1020 720, 1180 560
+                       C 1350 420, 1500 340, 1650 300"
                 />
+
                 <path
                         class="arc-glow arc-glow-left"
-                        d="M -120 38
-                       C 260 52, 590 205, 820 470
-                       C 960 632, 1045 840, 1125 1110"
+                        d="M 800 1180
+                        C 700 900, 560 580, 420 340
+                        C 260 120, 60 20, -200 20"
                 />
                 <path
                         class="arc-glow arc-glow-right"
-                        d="M 1122 1110
-                       C 1148 965, 1198 835, 1288 724
-                       C 1368 626, 1478 560, 1638 520"
+                        d="M 800 1180
+                       C 880 920, 1020 720, 1180 560
+                       C 1350 420, 1500 340, 1650 300"
                 />
             </svg>
         </div>
@@ -118,16 +120,6 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
                     <p class="mt-4 text-lg sm:text-xl text-slate-500 dark:text-slate-400 max-w-3xl">
                         Найдите пересдачу по группе, предмету или преподавателю
                     </p>
-
-                    <div class="mt-8">
-                        <a
-                                href="#board"
-                                data-arc-trigger
-                                class="inline-flex items-center justify-center h-12 px-6 rounded-2xl bg-red-500 text-white text-sm font-bold shadow-[0_12px_30px_rgba(239,68,68,0.22)] hover:bg-red-600 transition-all duration-200"
-                        >
-                            Перейти к поиску
-                        </a>
-                    </div>
                 </div>
             </div>
         </section>
@@ -175,29 +167,29 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
         }
 
         .arc-base-left {
-            stroke: url(#arcWhite);
-            stroke-width: 56;
-            opacity: 0.3;
+            stroke: #cfd8f6;
+            stroke-width: 52;
+            opacity: 0.55;
         }
 
         .arc-base-right {
             stroke: url(#arcBlue);
-            stroke-width: 56;
-            opacity: 0.3;
+            stroke-width: 52;
+            opacity: 0.25;
         }
 
         .arc-glow-left {
-            stroke: rgba(255,255,255,0.12);
-            stroke-width: 92;
+            stroke: rgba(186, 202, 242, 0.35);
+            stroke-width: 90;
             filter: blur(24px);
-            opacity: 0.2;
+            opacity: 0.22;
         }
 
         .arc-glow-right {
-            stroke: rgba(111,143,240,0.16);
-            stroke-width: 92;
+            stroke: rgba(111,143,240,0.2);
+            stroke-width: 90;
             filter: blur(24px);
-            opacity: 0.2;
+            opacity: 0.15;
         }
 
         .arc-trace {
@@ -205,64 +197,63 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
         }
 
         .arc-trace-left {
-            stroke: #3b82f6;
+            stroke: #60a5fa;
             stroke-width: 4;
-            filter: drop-shadow(0 0 8px rgba(59,130,246,0.5));
-            stroke-dasharray: 2000;
-            stroke-dashoffset: 2000;
+            filter: drop-shadow(0 0 8px rgba(96,165,250,0.5));
+            stroke-dasharray: 2400;
+            stroke-dashoffset: 2400;
         }
 
         .arc-trace-right {
             stroke: #60a5fa;
             stroke-width: 4;
-            filter: drop-shadow(0 0 8px rgba(96,165,250,0.5));
-            stroke-dasharray: 800;
-            stroke-dashoffset: 800;
+            filter: drop-shadow(0 0 10px rgba(96,165,250,0.5));
+            stroke-dasharray: 2000;
+            stroke-dashoffset: 2000;
         }
 
         .hero-shell.is-arc-animating .arc-trace-left {
-            animation: arcDrawLeft 1.5s cubic-bezier(.4,0,.2,1) forwards;
+            animation: arcDrawLeft 1.7s cubic-bezier(.4,0,.2,1) forwards;
         }
 
         .hero-shell.is-arc-animating .arc-trace-right {
-            animation: arcDrawRight 1.5s cubic-bezier(.4,0,.2,1) forwards;
+            animation: arcDrawRight 1.7s cubic-bezier(.4,0,.2,1) forwards;
         }
 
         .hero-shell.is-arc-animating .arc-base-left {
-            animation: arcBasePulseLeft 1.5s ease;
+            animation: arcBasePulseLeft 1.7s ease;
         }
 
         .hero-shell.is-arc-animating .arc-base-right {
-            animation: arcBasePulseRight 1.5s ease;
+            animation: arcBasePulseRight 1.7s ease;
         }
 
-        .hero-shell.is-arc-animating .arc-glow-left {
-            animation: arcGlowPulse 1.35s ease;
-        }
-
+        .hero-shell.is-arc-animating .arc-glow-left,
         .hero-shell.is-arc-animating .arc-glow-right {
-            animation: arcGlowPulse 1.35s ease;
+            animation: arcGlowPulse 1.5s ease;
         }
+
         @keyframes arcDrawLeft {
             0% {
-                stroke-dashoffset: 2000;
+                stroke-dashoffset: 2400;
                 opacity: 0;
             }
-            10% {
-                opacity: 1;
+            12% {
+                opacity: 0.85;
             }
-            80% {
+            78% {
                 stroke-dashoffset: 0;
-                opacity: 1;
+                opacity: 0.85;
             }
             100% {
                 stroke-dashoffset: 0;
-                opacity: 0;
+                opacity: 0.15;
             }
         }
+
         @keyframes arcDrawRight {
             0% {
-                stroke-dashoffset: 800;
+                stroke-dashoffset: 2000;
                 opacity: 0;
             }
             10% {
@@ -280,32 +271,32 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
 
         @keyframes arcBasePulseLeft {
             0%, 100% {
-                opacity: 0.3;
+                opacity: 0.5;
                 filter: none;
             }
             50% {
-                opacity: 0.5;
-                filter: drop-shadow(0 0 24px rgba(255,255,255,0.14));
+                opacity: 0.58;
+                filter: drop-shadow(0 0 14px rgba(185, 200, 246, 0.12));
             }
         }
 
         @keyframes arcBasePulseRight {
             0%, 100% {
-                opacity: 0.3;
+                opacity: 0.25;
                 filter: none;
             }
             50% {
-                opacity: 0.5;
-                filter: drop-shadow(0 0 24px rgba(152,178,255,0.18));
+                opacity: 0.42;
+                filter: drop-shadow(0 0 20px rgba(152,178,255,0.16));
             }
         }
 
         @keyframes arcGlowPulse {
             0%, 100% {
-                opacity: 0.2;
+                opacity: 0.15;
             }
             50% {
-                opacity: 0.4;
+                opacity: 0.3;
             }
         }
 
@@ -325,24 +316,33 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
         (() => {
             const hero = document.querySelector('.hero-shell');
             const triggers = document.querySelectorAll('[data-arc-trigger]');
-            if (!hero || !triggers.length) return;
+            if (!hero) return;
 
-            let timer;
+            let resetTimer;
+            let intervalId;
 
             const runAnimation = () => {
                 hero.classList.remove('is-arc-animating');
                 void hero.offsetWidth;
                 hero.classList.add('is-arc-animating');
 
-                clearTimeout(timer);
-                timer = setTimeout(() => {
+                clearTimeout(resetTimer);
+                resetTimer = setTimeout(() => {
                     hero.classList.remove('is-arc-animating');
-                }, 2000);
+                }, 1800);
             };
 
             triggers.forEach((el) => {
                 el.addEventListener('mouseenter', runAnimation);
                 el.addEventListener('focus', runAnimation);
+            });
+
+            runAnimation();
+            intervalId = setInterval(runAnimation, 10000);
+
+            window.addEventListener('beforeunload', () => {
+                clearTimeout(resetTimer);
+                clearInterval(intervalId);
             });
         })();
     </script>
