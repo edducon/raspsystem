@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { nextTick, ref, watch, computed } from 'vue';
 import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
 import { addToast } from '../composables/useToast';
 import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
+import {
+  formatGroupValue,
+  matchesGroupQuery,
+  getNormalizedCursorIndex,
+  getFormattedCursorIndex,
+} from '../lib/groupFormat';
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
 type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
@@ -103,14 +109,28 @@ let suppressFormContextReload = false;
 
 const filteredGroups = computed(() => {
   if (!groupSearchQuery.value) return props.groups.slice(0, 50);
-  const q = groupSearchQuery.value.toLowerCase();
-  return props.groups.filter((g) => g.number.toLowerCase().includes(q)).slice(0, 50);
+  return props.groups.filter((group) => matchesGroupQuery(group.number, groupSearchQuery.value)).slice(0, 50);
 });
 
 const selectGroup = (group: { uuid: string; number: string }) => {
   selectedGroupUuid.value = group.uuid;
   groupSearchQuery.value = group.number;
   showGroupDropdown.value = false;
+};
+
+const handleGroupInput = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const normalizedCursorIndex = getNormalizedCursorIndex(input.value, input.selectionStart);
+  const formatted = formatGroupValue(input.value);
+
+  groupSearchQuery.value = formatted;
+  selectedGroupUuid.value = '';
+  showGroupDropdown.value = true;
+
+  nextTick(() => {
+    const cursorIndex = getFormattedCursorIndex(formatted, normalizedCursorIndex);
+    input.setSelectionRange(cursorIndex, cursorIndex);
+  });
 };
 
 const selectSubject = (subject: RetakeSubjectOption) => {
@@ -650,18 +670,18 @@ const deleteRetake = async (id: string) => {
 </script>
 
 <template>
-  <div class="relative z-10 rounded-[30px] border border-slate-200/80 dark:border-white/10 bg-white/85 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_20px_70px_rgba(15,23,42,0.10)] overflow-hidden transition-colors">
+  <div class="relative z-10 rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow)] overflow-hidden transition-colors">
     <!-- Header -->
-    <div class="px-5 py-5 sm:px-6 sm:py-6 border-b border-slate-100 dark:border-white/10 flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 via-red-600 to-blue-600 flex items-center justify-center shadow-[0_16px_40px_rgba(239,68,68,0.24)] shrink-0">
-        <Calendar class="w-5 h-5 text-white" />
+    <div class="px-5 py-5 sm:px-6 sm:py-6 border-b border-[var(--panel-border)] flex items-center gap-4">
+      <div class="w-12 h-12 rounded-[16px] bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] flex items-center justify-center shrink-0">
+        <Calendar class="w-5 h-5 text-[var(--accent-strong)]" />
       </div>
 
       <div>
-        <p class="text-[11px] uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500 font-bold">
+        <p class="academic-kicker">
           Управление
         </p>
-        <h2 class="mt-1 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
+        <h2 class="mt-1 text-xl sm:text-2xl academic-title text-slate-950 dark:text-white">
           Назначение пересдачи
         </h2>
         <p class="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
@@ -673,7 +693,7 @@ const deleteRetake = async (id: string) => {
     <div class="p-5 sm:p-6 lg:p-7">
       <!-- Step 1 -->
       <div class="flex items-center gap-3 mb-4">
-        <div class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-[0_10px_24px_rgba(239,68,68,0.20)]">
+        <div class="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-black shrink-0">
           1
         </div>
         <h3 class="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white">
@@ -690,25 +710,25 @@ const deleteRetake = async (id: string) => {
 
           <div class="relative">
             <input
-                v-model="groupSearchQuery"
+                :value="groupSearchQuery"
                 @focus="showGroupDropdown = true"
-                @input="showGroupDropdown = true; selectedGroupUuid = ''"
+                @input="handleGroupInput"
                 type="text"
                 placeholder="Номер группы..."
-                class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 pr-10 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none transition-all"
+                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 pr-10 text-sm font-semibold bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
             />
             <ChevronDown class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
 
           <div
               v-if="showGroupDropdown && filteredGroups.length > 0"
-              class="absolute z-20 w-full mt-2 max-h-60 overflow-y-auto bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)]"
+              class="absolute z-20 w-full mt-2 max-h-60 overflow-y-auto bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)]"
           >
             <div
                 v-for="g in filteredGroups"
                 :key="g.uuid"
                 @click="selectGroup(g)"
-                class="px-4 py-3 hover:bg-red-50 dark:hover:bg-white/[0.04] cursor-pointer text-sm text-slate-700 dark:text-slate-200 font-semibold transition-colors"
+                class="px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer text-sm text-slate-700 dark:text-slate-200 font-semibold transition-colors"
             >
               {{ g.number }}
             </div>
@@ -727,7 +747,7 @@ const deleteRetake = async (id: string) => {
               type="button"
               :disabled="!selectedGroupUuid || isLoadingFormContext"
               @click="(!selectedGroupUuid || isLoadingFormContext) ? null : showSubjectDropdown = !showSubjectDropdown"
-              class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none disabled:opacity-50 transition-all flex items-center justify-between gap-3 text-left"
+              class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none disabled:opacity-50 transition-all flex items-center justify-between gap-3 text-left"
           >
             <span
                 class="truncate"
@@ -743,7 +763,7 @@ const deleteRetake = async (id: string) => {
             <div class="flex items-center gap-2 shrink-0">
               <div
                   v-if="isLoadingFormContext"
-                  class="w-4 h-4 rounded-full border-2 border-red-500 border-t-transparent animate-spin"
+                  class="w-4 h-4 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin"
               ></div>
               <ChevronDown class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="showSubjectDropdown ? 'rotate-180' : ''" />
             </div>
@@ -751,7 +771,7 @@ const deleteRetake = async (id: string) => {
 
           <div
               v-if="showSubjectDropdown"
-              class="absolute z-20 w-full mt-2 max-h-72 flex flex-col bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-72 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
           >
             <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
               <div class="relative">
@@ -761,7 +781,7 @@ const deleteRetake = async (id: string) => {
                     type="text"
                     @click.stop
                     placeholder="Поиск дисциплины..."
-                    class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-red-400 dark:text-white transition-colors"
+                    class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-[var(--accent)] dark:text-white transition-colors"
                 />
               </div>
             </div>
@@ -772,10 +792,10 @@ const deleteRetake = async (id: string) => {
                   :key="subject.uuid"
                   type="button"
                   @click="selectSubject(subject)"
-                  class="w-full px-4 py-3 text-left hover:bg-red-50 dark:hover:bg-white/[0.04] transition-colors flex items-center justify-between gap-3"
+                  class="w-full px-4 py-3 text-left hover:bg-[var(--panel-muted)] transition-colors flex items-center justify-between gap-3"
               >
                 <span class="text-sm text-slate-700 dark:text-slate-200">{{ subject.name }}</span>
-                <CheckCircle v-if="selectedSubject === subject.uuid" class="w-4 h-4 text-red-500 shrink-0" />
+                <CheckCircle v-if="selectedSubject === subject.uuid" class="w-4 h-4 text-[var(--accent-strong)] shrink-0" />
               </button>
 
               <div v-if="filteredAvailableSubjects.length === 0" class="p-4 text-sm text-slate-400 text-center">
@@ -835,7 +855,7 @@ const deleteRetake = async (id: string) => {
               type="date"
               v-model="selectedDate"
               :disabled="!selectedSubject"
-              class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark] transition-all"
+              class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark] transition-all"
           />
         </div>
       </div>
@@ -876,17 +896,18 @@ const deleteRetake = async (id: string) => {
         </div>
       </div>
 
+      <div class="scheduler-flow">
       <!-- Step 2 -->
-      <div v-if="selectedDate && selectedGroupUuid" class="mb-8">
+      <div v-if="selectedDate && selectedGroupUuid" class="mb-8 scheduler-step scheduler-step-slots">
         <div class="h-px bg-slate-100 dark:bg-white/10 mb-6"></div>
 
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-[0_10px_24px_rgba(239,68,68,0.20)]">
-              2
+            <div class="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-black shrink-0">
+              3
             </div>
             <h3 class="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <Clock class="w-4 h-4 text-red-500" />
+              <Clock class="w-4 h-4 text-[var(--accent-strong)]" />
               Расписание на день
             </h3>
           </div>
@@ -898,7 +919,7 @@ const deleteRetake = async (id: string) => {
 
         <div :class="{ 'hidden md:block': sectionsCollapsed.slots }">
           <div v-if="isLoadingSlots" class="flex items-center justify-center p-10 text-slate-500 dark:text-slate-400">
-            <div class="w-5 h-5 rounded-full border-2 border-red-500 border-t-transparent animate-spin mr-3"></div>
+            <div class="w-5 h-5 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin mr-3"></div>
             Загрузка расписания...
           </div>
 
@@ -912,8 +933,8 @@ const deleteRetake = async (id: string) => {
                 daySchedule[slot.toString()]
                   ? 'bg-slate-50 dark:bg-black/10 border-slate-200 dark:border-white/10 opacity-70 cursor-not-allowed'
                   : selectedSlots.includes(slot)
-                    ? 'bg-red-500 border-red-500 text-white shadow-[0_16px_40px_rgba(239,68,68,0.20)] cursor-pointer scale-[1.01]'
-                    : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15 cursor-pointer hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]'
+                  ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 cursor-pointer'
+                  : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/10 hover:border-[var(--panel-border-strong)] cursor-pointer'
               ]"
             >
               <div class="flex items-center gap-4">
@@ -937,8 +958,8 @@ const deleteRetake = async (id: string) => {
                   </div>
 
                   <div v-if="daySchedule[slot.toString()]" class="mt-0.5 flex flex-col gap-0.5">
-                    <div class="text-xs text-red-500 font-semibold flex items-center gap-1">
-                      <span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
+                    <div class="text-xs text-[var(--danger)] font-semibold flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-[var(--danger)] inline-block"></span>
                       {{ daySchedule[slot.toString()].reason }}
                     </div>
 
@@ -953,9 +974,9 @@ const deleteRetake = async (id: string) => {
                   <div
                       v-else
                       class="text-xs font-semibold mt-0.5 flex items-center gap-1"
-                      :class="selectedSlots.includes(slot) ? 'text-red-100' : 'text-emerald-600 dark:text-emerald-500'"
+                      :class="selectedSlots.includes(slot) ? 'text-white/80 dark:text-slate-700' : 'text-emerald-600 dark:text-emerald-500'"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full inline-block" :class="selectedSlots.includes(slot) ? 'bg-red-100' : 'bg-emerald-500'"></span>
+                    <span class="w-1.5 h-1.5 rounded-full inline-block" :class="selectedSlots.includes(slot) ? 'bg-white/80 dark:bg-slate-700' : 'bg-emerald-500'"></span>
                     {{ selectedSlots.includes(slot) ? 'Выбрано' : 'Свободно' }}
                   </div>
                 </div>
@@ -974,13 +995,14 @@ const deleteRetake = async (id: string) => {
         </div>
       </div>
 
+      <div class="scheduler-step scheduler-step-format">
       <!-- Step 3 -->
       <div class="h-px bg-slate-100 dark:bg-white/10 mb-6"></div>
 
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-[0_10px_24px_rgba(239,68,68,0.20)]">
-            3
+          <div class="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-black shrink-0">
+            4
           </div>
           <h3 class="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white">
             Формат и попытка
@@ -1004,8 +1026,8 @@ const deleteRetake = async (id: string) => {
               <button
                   @click="retakeFormat = 'offline'"
                   :class="retakeFormat === 'offline'
-                  ? 'bg-red-500 text-white border-red-500 shadow-[0_12px_28px_rgba(239,68,68,0.20)]'
-                  : 'bg-white dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15'"
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                  : 'bg-white dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-[var(--panel-border-strong)]'"
                   class="flex-1 py-2.5 px-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all text-sm border"
               >
                 <MapPin class="w-4 h-4" />
@@ -1015,8 +1037,8 @@ const deleteRetake = async (id: string) => {
               <button
                   @click="retakeFormat = 'online'"
                   :class="retakeFormat === 'online'
-                  ? 'bg-red-500 text-white border-red-500 shadow-[0_12px_28px_rgba(239,68,68,0.20)]'
-                  : 'bg-white dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15'"
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                  : 'bg-white dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-[var(--panel-border-strong)]'"
                   class="flex-1 py-2.5 px-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all text-sm border"
               >
                 <Globe class="w-4 h-4" />
@@ -1029,7 +1051,7 @@ const deleteRetake = async (id: string) => {
                 v-model="roomUuid"
                 type="text"
                 placeholder="Аудитория (А-414)"
-                class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none transition-all"
+                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
             />
 
             <input
@@ -1037,7 +1059,7 @@ const deleteRetake = async (id: string) => {
                 v-model="onlineLink"
                 type="url"
                 placeholder="Ссылка на подключение"
-                class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/10 focus:border-red-400 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/10 px-4 text-sm bg-white dark:bg-white/[0.03] dark:text-white outline-none transition-all"
+                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
             />
           </div>
 
@@ -1061,7 +1083,7 @@ const deleteRetake = async (id: string) => {
                     v-model="attemptNumber"
                     :value="n"
                     :disabled="assignedAttempts.includes(n)"
-                    class="w-4 h-4 text-red-500 disabled:cursor-not-allowed"
+                    class="w-4 h-4 text-[var(--accent)] disabled:cursor-not-allowed"
                 />
 
                 <span
@@ -1070,7 +1092,7 @@ const deleteRetake = async (id: string) => {
                     assignedAttempts.includes(n)
                       ? 'text-slate-400 dark:text-slate-500 line-through'
                       : n === 3
-                        ? 'text-red-600 dark:text-red-400'
+                        ? 'text-[var(--accent-strong)]'
                         : 'text-slate-800 dark:text-slate-200'
                   ]"
                 >
@@ -1083,16 +1105,19 @@ const deleteRetake = async (id: string) => {
         </div>
       </div>
 
+      </div>
+
+      <div class="scheduler-step scheduler-step-commission">
       <!-- Step 4 -->
       <div class="h-px bg-slate-100 dark:bg-white/10 mb-6"></div>
 
       <div class="flex items-center justify-between mb-4" :class="{ 'opacity-40 pointer-events-none': subjectBelongsToAnotherDept }">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-[0_10px_24px_rgba(239,68,68,0.20)]">
-            4
+          <div class="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-black shrink-0">
+            2
           </div>
           <h3 class="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <Users class="w-4 h-4 text-red-500" />
+            <Users class="w-4 h-4 text-[var(--accent-strong)]" />
             Комиссия
           </h3>
         </div>
@@ -1131,7 +1156,7 @@ const deleteRetake = async (id: string) => {
                   'w-full min-h-[48px] rounded-[22px] border p-2.5 flex flex-wrap gap-1.5 items-center transition-all',
                   !selectedSubject
                     ? 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 opacity-50 cursor-not-allowed'
-                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-red-400 dark:hover:border-red-500'
+                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-[var(--panel-border-strong)]'
                 ]"
               >
                 <span v-if="mainTeachers.length === 0" class="text-slate-400 dark:text-slate-500 pl-0.5 text-sm">
@@ -1150,7 +1175,7 @@ const deleteRetake = async (id: string) => {
 
               <div
                   v-if="showMainDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1160,7 +1185,7 @@ const deleteRetake = async (id: string) => {
                         v-model="mainSearchQuery"
                         @click.stop
                         placeholder="Поиск..."
-                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-red-400 dark:text-white transition-colors"
+                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-[var(--accent)] dark:text-white transition-colors"
                     />
                   </div>
                 </div>
@@ -1169,9 +1194,9 @@ const deleteRetake = async (id: string) => {
                   <label
                       v-for="t in displayMainTeachers"
                       :key="t.uuid"
-                      class="flex items-center px-4 py-3 hover:bg-red-50 dark:hover:bg-white/[0.04] cursor-pointer transition-colors"
+                      class="flex items-center px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer transition-colors"
                   >
-                    <input type="checkbox" :value="t.uuid" v-model="mainTeachers" class="w-4 h-4 text-red-500 rounded border-slate-300 focus:ring-red-500 mr-3">
+                    <input type="checkbox" :value="t.uuid" v-model="mainTeachers" class="w-4 h-4 text-[var(--accent)] rounded border-slate-300 focus:ring-[var(--accent)] mr-3">
                     <span class="text-sm text-slate-700 dark:text-slate-200">{{ t.fullName }}</span>
                   </label>
 
@@ -1205,7 +1230,7 @@ const deleteRetake = async (id: string) => {
                   'w-full min-h-[48px] rounded-[22px] border p-2.5 flex flex-wrap gap-1.5 items-center transition-all',
                   availableChairmen.length === 0
                     ? 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 opacity-50 cursor-not-allowed'
-                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-red-400 dark:hover:border-red-500'
+                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-[var(--panel-border-strong)]'
                 ]"
               >
                 <span v-if="!chairmanTeacher" class="text-slate-400 dark:text-slate-500 pl-0.5 text-sm">
@@ -1223,7 +1248,7 @@ const deleteRetake = async (id: string) => {
 
               <div
                   v-if="showChairmanDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1233,7 +1258,7 @@ const deleteRetake = async (id: string) => {
                         v-model="chairmanSearchQuery"
                         @click.stop
                         placeholder="Поиск..."
-                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-red-400 dark:text-white transition-colors"
+                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-[var(--accent)] dark:text-white transition-colors"
                     />
                   </div>
                 </div>
@@ -1243,7 +1268,7 @@ const deleteRetake = async (id: string) => {
                       v-for="t in displayChairmen"
                       :key="t.uuid"
                       @click="selectChairman(t.uuid)"
-                      class="px-4 py-3 hover:bg-red-50 dark:hover:bg-white/[0.04] cursor-pointer text-sm text-slate-700 dark:text-slate-200 transition-colors"
+                      class="px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer text-sm text-slate-700 dark:text-slate-200 transition-colors"
                   >
                     {{ t.fullName }}
                   </div>
@@ -1269,7 +1294,7 @@ const deleteRetake = async (id: string) => {
                   'w-full min-h-[48px] rounded-[22px] border p-2.5 flex flex-wrap gap-1.5 items-center transition-all',
                   availableCommissionTeachers.length === 0
                     ? 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 opacity-50 cursor-not-allowed'
-                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-red-400 dark:hover:border-red-500'
+                    : 'bg-white dark:bg-white/[0.03] border-slate-300 dark:border-white/10 cursor-pointer hover:border-[var(--panel-border-strong)]'
                 ]"
               >
                 <span v-if="commissionTeachers.length === 0" class="text-slate-400 dark:text-slate-500 pl-0.5 text-sm">
@@ -1288,7 +1313,7 @@ const deleteRetake = async (id: string) => {
 
               <div
                   v-if="showCommDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white/95 dark:bg-[#14171d]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-[22px] shadow-[0_20px_60px_rgba(15,23,42,0.16)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1298,7 +1323,7 @@ const deleteRetake = async (id: string) => {
                         v-model="commSearchQuery"
                         @click.stop
                         placeholder="Поиск..."
-                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-red-400 dark:text-white transition-colors"
+                        class="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:border-[var(--accent)] dark:text-white transition-colors"
                     />
                   </div>
                 </div>
@@ -1307,9 +1332,9 @@ const deleteRetake = async (id: string) => {
                   <label
                       v-for="t in displayCommTeachers"
                       :key="t.uuid"
-                      class="flex items-center px-4 py-3 hover:bg-red-50 dark:hover:bg-white/[0.04] cursor-pointer transition-colors"
+                      class="flex items-center px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer transition-colors"
                   >
-                    <input type="checkbox" :value="t.uuid" v-model="commissionTeachers" class="w-4 h-4 text-red-500 rounded border-slate-300 focus:ring-red-500 mr-3">
+                    <input type="checkbox" :value="t.uuid" v-model="commissionTeachers" class="w-4 h-4 text-[var(--accent)] rounded border-slate-300 focus:ring-[var(--accent)] mr-3">
                     <span class="text-sm text-slate-700 dark:text-slate-200">{{ t.fullName }}</span>
                   </label>
 
@@ -1324,15 +1349,17 @@ const deleteRetake = async (id: string) => {
           </div>
         </div>
       </div>
+      </div>
+      </div>
 
       <!-- Submit -->
-      <div class="flex justify-end pt-6 border-t border-slate-100 dark:border-white/10">
+      <div class="flex justify-end pt-6 border-t border-[var(--panel-border)]">
         <button
             @click="submitRetake"
             :disabled="isSubmitting || subjectBelongsToAnotherDept"
-            class="h-12 px-8 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black shadow-[0_16px_40px_rgba(239,68,68,0.24)] flex items-center gap-2 transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            class="h-12 px-8 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 font-black shadow-[var(--panel-shadow)] flex items-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <div v-if="isSubmitting" class="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+          <div v-if="isSubmitting" class="w-5 h-5 rounded-full border-2 border-white dark:border-slate-900 border-t-transparent animate-spin"></div>
           <CheckCircle v-else class="w-5 h-5" />
           Сохранить
         </button>
@@ -1340,5 +1367,24 @@ const deleteRetake = async (id: string) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.scheduler-flow {
+  display: flex;
+  flex-direction: column;
+}
+
+.scheduler-step-slots {
+  order: 2;
+}
+
+.scheduler-step-format {
+  order: 3;
+}
+
+.scheduler-step-commission {
+  order: 1;
+}
+</style>
 
 

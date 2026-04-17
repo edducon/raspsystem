@@ -36,28 +36,71 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     </script>
 </head>
 
-<body class="font-sans antialiased min-h-screen flex flex-col text-slate-900 dark:text-slate-100">
-<div class="page-bg"></div>
-<div class="page-noise"></div>
+<body class="min-h-screen font-sans antialiased flex flex-col text-slate-900 dark:text-slate-100">
+<div class="page-bg" aria-hidden="true"></div>
+<div class="page-grid" aria-hidden="true"></div>
+<div class="page-lines" aria-hidden="true">
+    <svg viewBox="0 0 1600 1200" preserveAspectRatio="none">
+        <defs>
+            <linearGradient id="layoutLine" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="rgba(67, 87, 120, 0.04)" />
+                <stop offset="52%" stop-color="rgba(67, 87, 120, 0.28)" />
+                <stop offset="100%" stop-color="rgba(67, 87, 120, 0.08)" />
+            </linearGradient>
+            <linearGradient id="layoutAccent" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(77, 122, 184, 0.08)" />
+                <stop offset="100%" stop-color="rgba(77, 122, 184, 0.26)" />
+            </linearGradient>
+            <marker id="layoutArrow" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(67, 87, 120, 0.22)"></path>
+            </marker>
+        </defs>
+        <path id="layoutPathOne" class="line-track line-track-one" d="M -120 230 C 180 120, 360 140, 590 320 S 1130 650, 1710 510" />
+        <path id="layoutPathTwo" class="line-track line-track-two" d="M -40 980 C 260 880, 480 810, 730 650 S 1210 300, 1650 220" />
+        <path class="line-track line-track-three" d="M 540 -60 C 620 220, 650 460, 730 690 S 930 1090, 1160 1280" />
+        <path class="line-trace" d="M -120 230 C 180 120, 360 140, 590 320 S 1130 650, 1710 510" marker-end="url(#layoutArrow)" />
+        <path class="line-accent" d="M -40 980 C 260 880, 480 810, 730 650 S 1210 300, 1650 220" />
+        <text class="line-label">
+            <textPath href="#layoutPathOne" startOffset="-10%">
+                241-362 • 221-361 • СЕССИЯ • КОМИССИЯ • Б-304 •
+                <animate attributeName="startOffset" values="-10%;110%" dur="34s" repeatCount="indefinite" />
+            </textPath>
+        </text>
+        <text class="line-label line-label-secondary">
+            <textPath href="#layoutPathTwo" startOffset="18%">
+                РАСПИСАНИЕ • ЭКЗАМЕН • А-205 • ИВТ-21 • ПАРА 3 •
+                <animate attributeName="startOffset" values="18%;128%" dur="38s" repeatCount="indefinite" />
+            </textPath>
+        </text>
+    </svg>
+</div>
+<div class="page-floaters" aria-hidden="true">
+    <span class="floater floater-a">241-362</span>
+    <span class="floater floater-b">221-361</span>
+    <span class="floater floater-c">Комиссия</span>
+    <span class="floater floater-d">Сессия</span>
+    <span class="floater floater-e">Б-304</span>
+    <span class="floater floater-f">Экзамен</span>
+</div>
 
 <header class="sticky top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
     <div class="mx-auto max-w-7xl">
         <div class="nav-shell h-16 px-4 sm:px-5 lg:px-6 flex items-center gap-4">
             <a href="/" class="flex items-center gap-3 shrink-0 group">
-                <div class="brand-mark flex items-center justify-center overflow-hidden" style="background: white; background-image: none; box-shadow: 0 12px 30px rgba(0,0,0,0.1);">
+                <div class="brand-mark">
                     <img
-                            src="/image/logo.png"
-                            alt="Логотип университета"
-                            class="w-8 h-8 object-contain"
+                        src="/image/logo.png"
+                        alt="Логотип университета"
+                        class="w-8 h-8 object-contain"
                     />
                 </div>
 
-                <div class="hidden sm:block">
-                    <div class="font-extrabold text-[15px] leading-tight tracking-tight text-slate-800 dark:text-white">
-                        Пересдачи
+                <div class="hidden sm:block min-w-0">
+                    <div class="font-extrabold text-[15px] leading-tight tracking-tight text-slate-900 dark:text-white">
+                        Расписание
                     </div>
-                    <div class="text-[10px] text-slate-600 dark:text-white/55 font-semibold tracking-[0.22em] uppercase">
-                        Московского политехнического университета
+                    <div class="text-[10px] text-slate-500 dark:text-white/55 font-semibold tracking-[0.22em] uppercase truncate">
+                        Московский политехнический университет
                     </div>
                 </div>
             </a>
@@ -69,13 +112,13 @@ const csrfToken = Astro.locals.csrfToken ?? "";
             <div class="flex items-center gap-2 shrink-0">
                 <slot name="nav-actions" />
 
-                <div class="hidden sm:block w-px h-6 bg-white/10 dark:bg-white/10 mx-1"></div>
+                <div class="hidden sm:block w-px h-6 bg-slate-200/80 dark:bg-white/10 mx-1"></div>
 
                 <button
-                        id="theme-toggle"
-                        class="theme-button"
-                        title="Переключить тему"
-                        aria-label="Переключить тему"
+                    id="theme-toggle"
+                    class="theme-button"
+                    title="Переключить тему"
+                    aria-label="Переключить тему"
                 >
                     <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
@@ -103,19 +146,19 @@ const csrfToken = Astro.locals.csrfToken ?? "";
                 <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-slate-600 dark:text-white/45">
                     <span>&copy; {currentYear} Факультет информационных технологий МПУ</span>
                     <span class="hidden sm:inline opacity-30 text-slate-400 dark:text-white/30">&middot;</span>
-                    <a href="tel:+74952230523" class="footer-link text-slate-600 dark:text-white/45 hover:text-slate-900 dark:hover:text-white transition-colors">+7 495 223-05-23, доб. 1709</a>
-                    <a href="mailto:fit@mospolytech.ru" class="footer-link text-slate-600 dark:text-white/45 hover:text-slate-900 dark:hover:text-white transition-colors">fit@mospolytech.ru</a>
+                    <a href="tel:+74952230523" class="footer-link">+7 495 223-05-23, доб. 1709</a>
+                    <a href="mailto:fit@mospolytech.ru" class="footer-link">fit@mospolytech.ru</a>
                 </div>
 
                 <span class="flex items-center gap-1.5 text-slate-600 dark:text-white/50">
-                Разработано
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" class="text-rose-500">
-                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-                </svg>
-                <a href="https://t.me/edducon" target="_blank" class="font-semibold text-slate-700 dark:text-white hover:text-red-500 dark:hover:text-red-400 transition-colors">
-                    @edducon
-                </a>
-            </span>
+                    Разработано
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" class="text-sky-600 dark:text-sky-400">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                    </svg>
+                    <a href="https://t.me/edducon" target="_blank" class="font-semibold text-slate-700 dark:text-white hover:text-sky-700 dark:hover:text-sky-300 transition-colors">
+                        @edducon
+                    </a>
+                </span>
             </div>
         </div>
     </div>
@@ -172,7 +215,7 @@ const csrfToken = Astro.locals.csrfToken ?? "";
                     ]
                 },
                 {
-                    duration: 500,
+                    duration: 460,
                     easing: 'ease-in-out',
                     pseudoElement: '::view-transition-new(root)'
                 }
@@ -184,26 +227,46 @@ const csrfToken = Astro.locals.csrfToken ?? "";
 <style is:global>
     :root {
         color-scheme: light;
-        --page-bg:
-                linear-gradient(180deg, #f7f7fa 0%, #eef1f6 46%, #e9edf5 100%);
-        --shell-bg: #ffffff;
-        --shell-border: rgba(255, 255, 255, 0.56);
-        --shell-shadow: 0 20px 60px rgba(15, 23, 42, 0.10);
-        --footer-bg: transparent;
-        --text-main: #0f172a;
-        --text-soft: rgba(15, 23, 42, 0.62);
+        --page-bg: linear-gradient(180deg, #f3efe8 0%, #eeebe4 52%, #e8e4dc 100%);
+        --page-grid: linear-gradient(rgba(92, 104, 124, 0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(92, 104, 124, 0.06) 1px, transparent 1px);
+        --panel-bg: rgba(255, 252, 247, 0.96);
+        --panel-bg-strong: #fffdf9;
+        --panel-muted: rgba(246, 241, 233, 0.92);
+        --panel-border: rgba(103, 112, 130, 0.16);
+        --panel-border-strong: rgba(63, 73, 92, 0.18);
+        --panel-shadow: 0 8px 24px rgba(33, 38, 45, 0.06), 0 1px 3px rgba(33, 38, 45, 0.05);
+        --panel-shadow-strong: 0 14px 30px rgba(33, 38, 45, 0.08), 0 2px 6px rgba(33, 38, 45, 0.06);
+        --text-main: #18202d;
+        --text-soft: rgba(24, 32, 45, 0.68);
+        --text-faint: rgba(24, 32, 45, 0.45);
+        --accent: #5a7aa5;
+        --accent-strong: #3b5c86;
+        --accent-soft: rgba(90, 122, 165, 0.12);
+        --danger: #ba4747;
+        --success: #2b7456;
     }
 
     html.dark {
         color-scheme: dark;
-        --page-bg:
-                linear-gradient(180deg, #0b0d11 0%, #10141a 50%, #0e1016 100%);
-        --shell-bg: #11151c;
-        --shell-border: rgba(255, 255, 255, 0.08);
-        --shell-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
-        --footer-bg: transparent;
-        --text-main: #ffffff;
-        --text-soft: rgba(255, 255, 255, 0.62);
+        --page-bg: linear-gradient(180deg, #11161c 0%, #161b22 48%, #0f141b 100%);
+        --page-grid: linear-gradient(rgba(183, 197, 219, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(183, 197, 219, 0.05) 1px, transparent 1px);
+        --panel-bg: rgba(20, 26, 35, 0.92);
+        --panel-bg-strong: #171d25;
+        --panel-muted: rgba(27, 34, 45, 0.9);
+        --panel-border: rgba(214, 223, 235, 0.1);
+        --panel-border-strong: rgba(214, 223, 235, 0.16);
+        --panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.16);
+        --panel-shadow-strong: 0 16px 36px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.2);
+        --text-main: #eef2f7;
+        --text-soft: rgba(238, 242, 247, 0.7);
+        --text-faint: rgba(238, 242, 247, 0.45);
+        --accent: #7ea1cf;
+        --accent-strong: #94b5df;
+        --accent-soft: rgba(126, 161, 207, 0.18);
+        --danger: #e07a7a;
+        --success: #70c29a;
     }
 
     html,
@@ -214,70 +277,123 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     body {
         background: var(--page-bg);
         color: var(--text-main);
-        transition:
-                background-color 0.35s ease,
-                color 0.35s ease;
+        transition: background-color 0.3s ease, color 0.3s ease;
         overflow-x: clip;
     }
 
-    .page-bg {
+    .page-bg,
+    .page-grid,
+    .page-lines {
         position: fixed;
         inset: 0;
-        z-index: 0;
         pointer-events: none;
-        background: none;
+        z-index: 0;
     }
 
-    html.dark .page-bg {
-        background: none;
+    .page-grid {
+        background-image: var(--page-grid);
+        background-size: 48px 48px;
+        opacity: 0.24;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
     }
 
-    .page-noise {
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        pointer-events: none;
-        opacity: 0.03;
-        mix-blend-mode: normal;
+    .page-lines svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+    .line-track,
+    .line-trace,
+    .line-accent {
+        fill: none;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .line-track {
+        stroke: url(#layoutLine);
+        stroke-width: 1.6;
+        stroke-dasharray: 10 14;
+    }
+
+    .line-track-three {
+        opacity: 0.65;
+    }
+
+    .line-trace {
+        stroke: rgba(76, 109, 154, 0.32);
+        stroke-width: 2.1;
+        stroke-dasharray: 10 18;
+        animation: pageLineDrift 18s linear infinite;
+    }
+
+    .line-accent {
+        stroke: url(#layoutAccent);
+        stroke-width: 36;
+        filter: blur(38px);
+        opacity: 0.24;
+    }
+
+    html.dark .line-track {
+        opacity: 0.85;
+    }
+
+    html.dark .line-trace {
+        stroke: rgba(153, 184, 223, 0.28);
+    }
+
+    .page-floaters {
+        display: none;
+    }
+
+    .line-label {
+        fill: rgba(62, 73, 89, 0.42);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+    }
+
+    .line-label-secondary {
+        fill: rgba(92, 125, 166, 0.44);
+    }
+
+    html.dark .line-label {
+        fill: rgba(214, 223, 235, 0.26);
+    }
+
+    html.dark .line-label-secondary {
+        fill: rgba(153, 184, 223, 0.28);
+    }
+
+    .nav-shell,
+    .footer-shell {
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        box-shadow: var(--panel-shadow);
+        border-radius: 18px;
+        backdrop-filter: none;
     }
 
     .nav-shell {
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: var(--shell-bg);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-        border-radius: 22px;
-    }
-
-    .nav-shell:hover {
-        transform: translateY(-1px);
+        transition: box-shadow 0.24s ease, border-color 0.24s ease;
     }
 
     .brand-mark {
         width: 42px;
         height: 42px;
-        border-radius: 16px;
-        display: flex;
+        border-radius: 15px;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.95rem;
-        font-weight: 900;
-        color: white;
-        background:
-                linear-gradient(135deg, #ef4444 0%, #dc2626 42%, #2563eb 100%);
-        box-shadow:
-                0 12px 30px rgba(239, 68, 68, 0.26),
-                inset 0 1px 0 rgba(255, 255, 255, 0.22);
-        transition:
-                transform 0.25s ease,
-                box-shadow 0.25s ease;
-        user-select: none;
+        background: linear-gradient(180deg, #ffffff 0%, #f2eee8 100%);
+        border: 1px solid rgba(103, 112, 130, 0.14);
+        box-shadow: 0 6px 16px rgba(30, 36, 44, 0.08);
     }
 
-    .group:hover .brand-mark {
-        transform: translateY(-1px) scale(1.03);
-        box-shadow:
-                0 16px 34px rgba(239, 68, 68, 0.32),
-                inset 0 1px 0 rgba(255, 255, 255, 0.26);
+    html.dark .brand-mark {
+        background: linear-gradient(180deg, #1f2731 0%, #171d25 100%);
+        border-color: rgba(214, 223, 235, 0.1);
     }
 
     .theme-button {
@@ -287,55 +403,25 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.7);
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        transition:
-                transform 0.22s ease,
-                background-color 0.22s ease,
-                color 0.22s ease,
-                border-color 0.22s ease,
-                box-shadow 0.22s ease;
+        color: var(--text-soft);
+        background: var(--panel-muted);
+        border: 1px solid var(--panel-border);
+        transition: transform 0.22s ease, color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
     }
 
     .theme-button:hover {
-        transform: translateY(-1px);
-        color: white;
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.14);
-        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
-    }
-
-    html:not(.dark) .theme-button {
-        color: rgba(15, 23, 42, 0.68);
-        background: rgba(255, 255, 255, 0.62);
-        border-color: rgba(15, 23, 42, 0.08);
-    }
-
-    html:not(.dark) .theme-button:hover {
-        color: rgba(15, 23, 42, 0.95);
-        background: rgba(255, 255, 255, 0.9);
-        border-color: rgba(15, 23, 42, 0.1);
-        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.1);
-    }
-
-    .footer-shell {
-        border: 1px solid var(--shell-border);
-        background: var(--footer-bg);
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-        border-radius: 22px;
+        color: var(--text-main);
+        border-color: var(--panel-border-strong);
+        box-shadow: 0 8px 18px rgba(33, 38, 45, 0.08);
     }
 
     .footer-link {
+        color: inherit;
         transition: color 0.2s ease;
     }
 
     .footer-link:hover {
-        color: white;
-    }
-
-    html:not(.dark) .footer-link:hover {
-        color: #0f172a;
+        color: var(--accent-strong);
     }
 
     ::view-transition-old(root),
@@ -361,12 +447,62 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         display: none;
     }
 
+    .academic-panel {
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        box-shadow: var(--panel-shadow);
+        border-radius: 22px;
+    }
+
+    .academic-section {
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg-strong);
+        box-shadow: var(--panel-shadow);
+        border-radius: 18px;
+    }
+
+    .academic-muted {
+        background: var(--panel-muted);
+        border: 1px solid var(--panel-border);
+        border-radius: 22px;
+    }
+
+    .academic-kicker {
+        font-size: 11px;
+        line-height: 1;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        font-weight: 800;
+        color: var(--text-faint);
+    }
+
+    .academic-title {
+        letter-spacing: -0.04em;
+        font-weight: 900;
+    }
+
+    .tnum {
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum" 1;
+    }
+
     * {
-        transition:
-                background-color 0.25s ease,
-                border-color 0.25s ease,
-                color 0.25s ease,
-                box-shadow 0.25s ease;
+        transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    @keyframes pageLineDrift {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: -280;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .line-trace {
+            animation: none !important;
+        }
     }
 </style>
 </body>

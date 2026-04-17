@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, Globe, AlertTriangle, Users } from 'lucide-vue-next';
+import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Globe, AlertTriangle, Users } from 'lucide-vue-next';
 
 const props = defineProps<{
   teacherFullName: string;
@@ -9,51 +9,10 @@ const props = defineProps<{
 }>();
 
 const currentDate = ref(new Date());
-
-const setToday = () => { currentDate.value = new Date(); };
-const nextWeek = () => { const d = new Date(currentDate.value); d.setDate(d.getDate() + 7); currentDate.value = d; };
-const prevWeek = () => { const d = new Date(currentDate.value); d.setDate(d.getDate() - 7); currentDate.value = d; };
-
-const currentWeekStart = computed(() => {
-  const d = new Date(currentDate.value);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  return start;
-});
+const activeTab = ref('monday');
 
 const daysOfWeekNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const shortDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-
-const weekDays = computed(() => {
-  return daysOfWeekNames.map((dayName, idx) => {
-    const date = new Date(currentWeekStart.value);
-    date.setDate(date.getDate() + idx);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return { id: dayName, date, dateStr: `${year}-${month}-${day}`, label: `${shortDays[idx]}, ${day}.${month}` };
-  });
-});
-
-const weekDateRange = computed(() => {
-  const start = weekDays.value[0].date;
-  const end = weekDays.value[5].date;
-  const format = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  if (start.getMonth() !== end.getMonth()) {
-    return `${format(start).split(' ')[0]} ${format(start).split(' ')[1].slice(0, 3)} — ${format(end)}`;
-  }
-  return `${start.getDate()} — ${format(end)}`;
-});
-
-const activeTab = ref('monday');
-
-watch(currentDate, (val) => {
-  const d = val.getDay();
-  if (d >= 1 && d <= 6) activeTab.value = daysOfWeekNames[d - 1];
-  else activeTab.value = 'monday';
-}, { immediate: true });
 
 const TIME_MAPPING: Record<number, string> = {
   1: '09:00-10:30',
@@ -65,53 +24,89 @@ const TIME_MAPPING: Record<number, string> = {
   7: '19:30-21:00',
 };
 
-const parseDateString = (ds: string) => {
-  if (!ds) return 0;
-  const [y, m, d] = ds.split('-');
-  return new Date(Number(y), Number(m) - 1, Number(d)).getTime();
+const currentWeekStart = computed(() => {
+  const date = new Date(currentDate.value);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  const start = new Date(date.setDate(diff));
+  start.setHours(0, 0, 0, 0);
+  return start;
+});
+
+const weekDays = computed(() => daysOfWeekNames.map((dayName, idx) => {
+  const date = new Date(currentWeekStart.value);
+  date.setDate(date.getDate() + idx);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return {
+    id: dayName,
+    date,
+    dateStr: `${year}-${month}-${day}`,
+    label: `${shortDays[idx]}, ${day}.${month}`,
+  };
+}));
+
+const weekDateRange = computed(() => {
+  const start = weekDays.value[0].date;
+  const end = weekDays.value[5].date;
+  const format = (date: Date) => date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+  if (start.getMonth() !== end.getMonth()) {
+    return `${format(start).split(' ')[0]} ${format(start).split(' ')[1].slice(0, 3)} — ${format(end)}`;
+  }
+
+  return `${start.getDate()} — ${format(end)}`;
+});
+
+const parseDateString = (value: string) => {
+  if (!value) return 0;
+  const [year, month, day] = value.split('-');
+  return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
 };
 
 const mergedDaySchedule = computed(() => {
-  const activeDay = weekDays.value.find(d => d.id === activeTab.value);
+  const activeDay = weekDays.value.find((day) => day.id === activeTab.value);
   if (!activeDay) return [];
 
   const targetTime = parseDateString(activeDay.dateStr);
   const items: any[] = [];
   const processedRetakeIds = new Set<string>();
+  const todaysRetakes = props.retakes.filter((retake) => retake.date === activeDay.dateStr);
 
-  const todaysRetakes = props.retakes.filter(r => r.date === activeDay.dateStr);
+  todaysRetakes.forEach((retake) => {
+    if (processedRetakeIds.has(retake.id)) return;
 
-  todaysRetakes.forEach(retake => {
-    if (!processedRetakeIds.has(retake.id)) {
-      processedRetakeIds.add(retake.id);
-      let hasConflict = false;
+    processedRetakeIds.add(retake.id);
+    let hasConflict = false;
 
-      retake.timeSlots.forEach((slot: number) => {
-        if (props.baseSchedule && props.baseSchedule[activeDay.id] && props.baseSchedule[activeDay.id][slot]) {
-          const conflictingPair = props.baseSchedule[activeDay.id][slot].find((p: any) => {
-            if (!p.start_date || !p.end_date) return true;
-            return targetTime >= parseDateString(p.start_date) && targetTime <= parseDateString(p.end_date);
-          });
-          if (conflictingPair) hasConflict = true;
-        }
-      });
+    retake.timeSlots.forEach((slot: number) => {
+      if (props.baseSchedule && props.baseSchedule[activeDay.id] && props.baseSchedule[activeDay.id][slot]) {
+        const conflictingPair = props.baseSchedule[activeDay.id][slot].find((pair: any) => {
+          if (!pair.start_date || !pair.end_date) return true;
+          return targetTime >= parseDateString(pair.start_date) && targetTime <= parseDateString(pair.end_date);
+        });
 
-      items.push({ type: 'retake', startSlot: Math.min(...retake.timeSlots), data: retake, hasConflict });
-    }
+        if (conflictingPair) hasConflict = true;
+      }
+    });
+
+    items.push({ type: 'retake', startSlot: Math.min(...retake.timeSlots), data: retake, hasConflict });
   });
 
-  for (let slot = 1; slot <= 7; slot++) {
+  for (let slot = 1; slot <= 7; slot += 1) {
     if (props.baseSchedule && props.baseSchedule[activeDay.id] && props.baseSchedule[activeDay.id][slot]) {
       const pairsInSlot = props.baseSchedule[activeDay.id][slot];
-      const regularPair = pairsInSlot.find((p: any) => {
-        if (!p.start_date || !p.end_date) return true;
-        const start = parseDateString(p.start_date);
-        const end = parseDateString(p.end_date);
+      const regularPair = pairsInSlot.find((pair: any) => {
+        if (!pair.start_date || !pair.end_date) return true;
+        const start = parseDateString(pair.start_date);
+        const end = parseDateString(pair.end_date);
         return targetTime >= start && targetTime <= end;
       });
 
       if (regularPair) {
-        const isRetakeInThisSlot = todaysRetakes.some(r => r.timeSlots.includes(slot));
+        const isRetakeInThisSlot = todaysRetakes.some((retake) => retake.timeSlots.includes(slot));
         if (!isRetakeInThisSlot) {
           items.push({ type: 'regular', startSlot: slot, data: regularPair });
         }
@@ -122,281 +117,227 @@ const mergedDaySchedule = computed(() => {
   return items.sort((a, b) => a.startSlot - b.startSlot);
 });
 
+watch(currentDate, (value) => {
+  const day = value.getDay();
+  if (day >= 1 && day <= 6) {
+    activeTab.value = daysOfWeekNames[day - 1];
+    return;
+  }
+
+  activeTab.value = 'monday';
+}, { immediate: true });
+
+const setToday = () => { currentDate.value = new Date(); };
+const nextWeek = () => {
+  const date = new Date(currentDate.value);
+  date.setDate(date.getDate() + 7);
+  currentDate.value = date;
+};
+const prevWeek = () => {
+  const date = new Date(currentDate.value);
+  date.setDate(date.getDate() - 7);
+  currentDate.value = date;
+};
+
 const getRoleBadge = (role: string) => {
   if (role === 'CHAIRMAN') {
     return {
       text: 'Председатель',
-      class: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
+      class: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20',
     };
   }
+
   if (role === 'MAIN') {
     return {
       text: 'Ведущий',
-      class: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
+      class: 'bg-[var(--accent-soft)] text-[var(--accent-strong)] border border-[var(--panel-border)]',
     };
   }
+
   return {
     text: 'Комиссия',
-    class: 'bg-slate-50 text-slate-600 border border-slate-200 dark:bg-white/[0.04] dark:text-slate-400 dark:border-white/10'
+    class: 'bg-[var(--panel-muted)] text-slate-600 border border-[var(--panel-border)] dark:text-slate-300',
   };
 };
 </script>
 
 <template>
-  <div class="relative z-10 rounded-[30px] border border-slate-200/80 dark:border-white/10 bg-white/85 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_20px_70px_rgba(15,23,42,0.10)] overflow-hidden transition-colors">
-    <!-- Header -->
-    <div class="px-5 py-5 sm:px-6 sm:py-6 border-b border-slate-100 dark:border-white/10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
-      <div class="flex items-center gap-4">
-        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 via-red-600 to-blue-600 flex items-center justify-center shadow-[0_16px_40px_rgba(239,68,68,0.24)] shrink-0">
-          <CalendarDays class="w-5 h-5 text-white" />
-        </div>
-
-        <div>
-          <p class="text-[11px] uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500 font-bold">
-            Кабинет преподавателя
-          </p>
-          <h2 class="mt-1 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
-            Моё расписание
-          </h2>
-          <p class="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-            {{ teacherFullName }}
-          </p>
-        </div>
+  <div class="overflow-hidden rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow)]">
+    <div class="flex flex-col gap-4 border-b border-[var(--panel-border)] px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+      <div>
+        <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Преподаватель</div>
+        <h2 class="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">Моё расписание</h2>
+        <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ teacherFullName }}</div>
       </div>
 
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
-            @click="setToday"
-            class="h-11 px-4 rounded-2xl text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/[0.07] hover:-translate-y-0.5 transition-all"
+          @click="setToday"
+          class="h-11 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 text-sm font-semibold text-slate-700 dark:text-slate-200"
         >
           Сегодня
         </button>
 
-        <div class="flex items-center justify-between sm:justify-start bg-white/90 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 p-1 rounded-2xl">
+        <div class="flex items-center rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] p-1">
           <button
-              @click="prevWeek"
-              class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.07] transition-colors"
+            @click="prevWeek"
+            class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 dark:text-slate-400"
           >
-            <ChevronLeft class="w-4 h-4" />
+            <ChevronLeft class="h-4 w-4" />
           </button>
 
-          <div class="px-3 text-center text-sm font-black tracking-tight text-slate-900 dark:text-white min-w-[150px]">
+          <div class="min-w-[170px] px-3 text-center text-sm font-black tracking-tight text-slate-900 dark:text-white">
             {{ weekDateRange }}
           </div>
 
           <button
-              @click="nextWeek"
-              class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.07] transition-colors"
+            @click="nextWeek"
+            class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 dark:text-slate-400"
           >
-            <ChevronRight class="w-4 h-4" />
+            <ChevronRight class="h-4 w-4" />
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Day tabs -->
-    <div class="flex overflow-x-auto border-b border-slate-100 dark:border-white/10 hide-scrollbar bg-slate-50/70 dark:bg-black/10 px-2 sm:px-3 py-2">
+    <div class="hide-scrollbar flex overflow-x-auto border-b border-[var(--panel-border)] bg-[var(--panel-muted)] px-2 py-2 sm:px-3">
       <button
-          v-for="day in weekDays"
-          :key="day.id"
-          @click="activeTab = day.id"
-          :class="[
-          'flex-1 min-w-[92px] rounded-2xl py-3 text-center text-sm transition-all outline-none border',
+        v-for="day in weekDays"
+        :key="day.id"
+        @click="activeTab = day.id"
+        :class="[
+          'min-w-[98px] flex-1 rounded-[16px] border py-3 text-center text-sm',
           activeTab === day.id
-            ? 'text-white bg-red-500 border-red-500 shadow-[0_12px_28px_rgba(239,68,68,0.20)]'
-            : 'text-slate-500 dark:text-slate-400 border-transparent hover:border-slate-200 dark:hover:border-white/10 hover:bg-white dark:hover:bg-white/[0.04]'
+            ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+            : 'border-transparent text-slate-500 dark:text-slate-400',
         ]"
       >
-        <div class="text-xs font-black tracking-tight">
-          {{ day.label.split(',')[0] }}
-        </div>
-        <div
-            class="text-[10px] mt-0.5"
-            :class="activeTab === day.id ? 'text-white/70' : 'opacity-70'"
-        >
+        <div class="text-xs font-black tracking-tight">{{ day.label.split(',')[0] }}</div>
+        <div class="mt-0.5 text-[10px]" :class="activeTab === day.id ? 'text-white/70 dark:text-slate-500' : 'opacity-70'">
           {{ day.label.split(',')[1] }}
         </div>
       </button>
     </div>
 
-    <!-- Content -->
-    <div class="p-5 sm:p-6 min-h-[380px]">
-      <!-- Empty -->
-      <div v-if="mergedDaySchedule.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-        <div class="w-16 h-16 rounded-full flex items-center justify-center mb-5 bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10">
-          <CalendarDays class="w-7 h-7 text-slate-300 dark:text-slate-600" />
-        </div>
-
-        <h3 class="text-lg font-black tracking-tight text-slate-700 dark:text-slate-200">
-          Пар нет
-        </h3>
-
-        <p class="text-sm text-slate-400 dark:text-slate-500 mt-2 max-w-xs leading-6">
-          На этот день занятия не запланированы
-        </p>
+    <div v-if="mergedDaySchedule.length === 0" class="px-5 py-20 text-center">
+      <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--panel-border)] bg-[var(--panel-muted)]">
+        <CalendarDays class="h-7 w-7 text-slate-300 dark:text-slate-600" />
       </div>
-
-      <!-- Schedule items -->
-      <div v-else class="space-y-4">
-        <div
-            v-for="(item, idx) in mergedDaySchedule"
-            :key="idx"
-            class="flex flex-col lg:flex-row gap-3 lg:gap-4"
-        >
-          <!-- Time badge -->
-          <div class="lg:w-28 shrink-0 flex lg:flex-col items-center lg:items-start gap-2 lg:gap-1 lg:pt-3">
-            <div class="px-3.5 py-2 rounded-2xl font-bold text-slate-600 dark:text-slate-300 text-xs whitespace-nowrap bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10">
-              {{ item.type === 'retake' ? item.data.timeSlots.join(', ') : item.startSlot }} пара
-            </div>
-
-            <div class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 font-mono lg:mt-1">
-              <template v-if="item.type === 'retake'">
-                {{ TIME_MAPPING[item.data.timeSlots[0]].split('-')[0] }} - {{ TIME_MAPPING[item.data.timeSlots[item.data.timeSlots.length - 1]].split('-')[1] }}
-              </template>
-              <template v-else>
-                {{ TIME_MAPPING[item.startSlot] }}
-              </template>
-            </div>
-          </div>
-
-          <!-- Regular class -->
-          <div v-if="item.type === 'regular'" class="flex-1">
-            <div class="rounded-[24px] border border-slate-200/80 dark:border-white/10 bg-white/90 dark:bg-white/[0.04] backdrop-blur-xl p-4 sm:p-5 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(15,23,42,0.10)] transition-all duration-300">
-              <div class="flex flex-wrap items-center gap-2 mb-3">
-                <span class="px-2.5 py-1 text-[10px] font-black rounded-xl uppercase tracking-[0.16em] bg-slate-100 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10">
-                  Расписание
-                </span>
-
-                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                  <Users class="w-3.5 h-3.5 opacity-60" />
-                  {{ item.data.group.number }}
-                </span>
-
-                <span class="text-[10px] text-slate-400 dark:text-slate-500 font-semibold bg-slate-50 dark:bg-white/[0.04] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-white/10">
-                  {{ item.data.subject_type.type }}
-                </span>
-              </div>
-
-              <h4 class="font-black tracking-tight text-slate-950 dark:text-white text-lg sm:text-xl mb-3">
-                {{ item.data.subject.name }}
-              </h4>
-
-              <div
-                  class="flex flex-wrap items-center gap-3 text-sm font-medium"
-                  :class="item.data.link ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'"
-              >
-                <template v-if="item.data.link">
-                  <a :href="item.data.link" target="_blank" class="flex items-center gap-2 hover:underline">
-                    <Globe class="w-4 h-4" />
-                    Онлайн
-                  </a>
-                </template>
-
-                <template v-else>
-                  <span class="flex items-center gap-2">
-                    <MapPin class="w-4 h-4" />
-                    {{ item.data.location.name }}
-                    <span
-                        v-if="item.data.rooms && item.data.rooms[0]"
-                        class="font-bold text-slate-700 dark:text-slate-200"
-                    >
-                      ({{ item.data.rooms[0].number }})
-                    </span>
-                  </span>
-                </template>
-              </div>
-            </div>
-          </div>
-
-          <!-- Retake -->
-          <div v-if="item.type === 'retake'" class="flex-1">
-            <div
-                :class="[
-                'rounded-[24px] border p-4 sm:p-5 relative overflow-hidden backdrop-blur-xl hover:-translate-y-1 transition-all duration-300',
-                item.hasConflict
-                  ? 'bg-red-50/90 dark:bg-red-500/10 border-red-200 dark:border-red-500/20 hover:shadow-[0_20px_60px_rgba(239,68,68,0.14)]'
-                  : 'bg-white/90 dark:bg-white/[0.04] border-slate-200/80 dark:border-white/10 hover:shadow-[0_20px_60px_rgba(15,23,42,0.10)]'
-              ]"
-            >
-              <div
-                  class="absolute left-0 top-0 bottom-0 w-1.5"
-                  :class="item.hasConflict ? 'bg-red-500' : 'bg-gradient-to-b from-red-500 to-blue-600'"
-              ></div>
-
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pl-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span
-                      class="px-3 py-1.5 text-white text-[10px] font-black rounded-xl uppercase tracking-[0.16em]"
-                      :class="item.hasConflict ? 'bg-red-500' : 'bg-gradient-to-r from-red-500 to-blue-600'"
-                  >
-                    Пересдача
-                  </span>
-
-                  <span
-                      class="px-3 py-1.5 text-[10px] font-bold rounded-xl border"
-                      :class="item.hasConflict
-                      ? 'bg-white/70 dark:bg-black/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/20'
-                      : 'bg-slate-50 dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'"
-                  >
-                    Попытка {{ item.data.attemptNumber }}
-                  </span>
-
-                  <span
-                      class="text-xs font-semibold flex items-center gap-1.5"
-                      :class="item.hasConflict ? 'text-red-700 dark:text-red-300' : 'text-slate-600 dark:text-slate-300'"
-                  >
-                    <Users class="w-3.5 h-3.5" />
-                    {{ item.data.groupName }}
-                  </span>
-                </div>
-
-                <div
-                    v-if="item.hasConflict"
-                    class="flex items-center gap-1.5 text-red-600 dark:text-red-400 text-[10px] font-black bg-white dark:bg-red-950/40 px-2.5 py-1.5 rounded-xl border border-red-200 dark:border-red-500/20 self-start"
-                >
-                  <AlertTriangle class="w-3 h-3" />
-                  Накладка
-                </div>
-              </div>
-
-              <h4
-                  class="font-black tracking-tight text-lg sm:text-xl mb-3 pl-3"
-                  :class="item.hasConflict ? 'text-red-950 dark:text-red-50' : 'text-slate-950 dark:text-white'"
-              >
-                {{ item.data.subjectName }}
-              </h4>
-
-              <div
-                  class="flex flex-wrap items-center gap-3 text-sm pl-3 font-medium"
-                  :class="item.hasConflict ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'"
-              >
-                <template v-if="item.data.link">
-                  <a :href="item.data.link" target="_blank" class="flex items-center gap-2 hover:underline">
-                    <Globe class="w-4 h-4" />
-                    Онлайн
-                  </a>
-                </template>
-
-                <template v-else>
-                  <span class="flex items-center gap-2">
-                    <MapPin class="w-4 h-4" />
-                    {{ item.data.room || 'Аудитория уточняется' }}
-                  </span>
-                </template>
-
-                <span
-                    class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-[0.14em]"
-                    :class="getRoleBadge(item.data.myRole).class"
-                >
-                  {{ getRoleBadge(item.data.myRole).text }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <h3 class="text-lg font-black tracking-tight text-slate-700 dark:text-slate-200">Пар нет</h3>
     </div>
 
+    <div v-else class="divide-y divide-[var(--panel-border)]">
+      <article
+        v-for="(item, idx) in mergedDaySchedule"
+        :key="idx"
+        class="grid gap-4 px-5 py-5 lg:grid-cols-[8rem_minmax(0,1fr)]"
+        :class="item.type === 'retake' && item.hasConflict ? 'bg-red-50/70 dark:bg-red-500/10' : ''"
+      >
+        <div class="space-y-1 lg:border-r lg:border-[var(--panel-border)] lg:pr-4">
+          <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            {{ item.type === 'retake' ? 'Пересдача' : 'Пара' }}
+          </div>
+          <div class="text-2xl font-black text-slate-950 dark:text-white tnum">
+            {{ item.type === 'retake' ? item.data.timeSlots.join(', ') : item.startSlot }}
+          </div>
+          <div class="text-sm text-slate-500 dark:text-slate-400 tnum">
+            <template v-if="item.type === 'retake'">
+              {{ TIME_MAPPING[item.data.timeSlots[0]].split('-')[0] }} - {{ TIME_MAPPING[item.data.timeSlots[item.data.timeSlots.length - 1]].split('-')[1] }}
+            </template>
+            <template v-else>
+              {{ TIME_MAPPING[item.startSlot] }}
+            </template>
+          </div>
+        </div>
+
+        <div v-if="item.type === 'regular'" class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-full bg-[var(--panel-muted)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">
+              Расписание
+            </span>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              <Users class="h-3.5 w-3.5 opacity-60" />
+              {{ item.data.group.number }}
+            </span>
+            <span class="rounded-full border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-2.5 py-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              {{ item.data.subject_type.type }}
+            </span>
+          </div>
+
+          <h4 class="text-xl font-black tracking-tight text-slate-950 dark:text-white">
+            {{ item.data.subject.name }}
+          </h4>
+
+          <div class="flex flex-wrap items-center gap-3 text-sm font-medium" :class="item.data.link ? 'text-[var(--accent-strong)]' : 'text-slate-500 dark:text-slate-400'">
+            <template v-if="item.data.link">
+              <a :href="item.data.link" target="_blank" class="flex items-center gap-2 hover:underline">
+                <Globe class="h-4 w-4" />
+                Онлайн
+              </a>
+            </template>
+
+            <template v-else>
+              <span class="flex items-center gap-2">
+                <MapPin class="h-4 w-4" />
+                {{ item.data.location.name }}
+                <span v-if="item.data.rooms && item.data.rooms[0]" class="font-bold text-slate-700 dark:text-slate-200">
+                  ({{ item.data.rooms[0].number }})
+                </span>
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+              :class="item.hasConflict ? 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' : 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'"
+            >
+              Пересдача
+            </span>
+            <span class="rounded-full border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-2.5 py-1 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              Попытка {{ item.data.attemptNumber }}
+            </span>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              <Users class="h-3.5 w-3.5" />
+              {{ item.data.groupName }}
+            </span>
+            <span
+              class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+              :class="getRoleBadge(item.data.myRole).class"
+            >
+              {{ getRoleBadge(item.data.myRole).text }}
+            </span>
+          </div>
+
+          <h4 class="text-xl font-black tracking-tight text-slate-950 dark:text-white">
+            {{ item.data.subjectName }}
+          </h4>
+
+          <div class="flex flex-wrap items-center gap-3 text-sm font-medium" :class="item.hasConflict ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">
+            <template v-if="item.data.link">
+              <a :href="item.data.link" target="_blank" class="flex items-center gap-2 hover:underline">
+                <Globe class="h-4 w-4" />
+                Онлайн
+              </a>
+            </template>
+
+            <template v-else>
+              <span class="flex items-center gap-2">
+                <MapPin class="h-4 w-4" />
+                {{ item.data.room || 'Аудитория уточняется' }}
+              </span>
+            </template>
+
+            <span v-if="item.hasConflict" class="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              <AlertTriangle class="h-3 w-3" />
+              Накладка
+            </span>
+          </div>
+        </div>
+      </article>
+    </div>
   </div>
 </template>
 
@@ -404,6 +345,7 @@ const getRoleBadge = (role: string) => {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
+import MainScheduleBoard from '../components/MainScheduleBoard.vue';
 import StudentBoard from '../components/StudentBoard.vue';
 import { fetchBackendFromServer } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
@@ -44,306 +45,29 @@ const formattedRetakes = allRetakes.map((retake: any) => ({
 }));
 ---
 
-<Layout title="Расписание пересдач">
+<Layout title="Расписание">
     <a
-            slot="nav-actions"
-            href="/login"
-            data-arc-trigger
-            class="inline-flex items-center justify-center h-10 px-4 rounded-xl border border-slate-300 bg-white text-slate-900 hover:bg-slate-100 text-sm font-semibold transition"
+        slot="nav-actions"
+        href="/login"
+        class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-slate-300/80 dark:border-white/10 bg-[var(--panel-bg-strong)] dark:bg-[var(--panel-muted)] text-slate-900 dark:text-white hover:border-slate-400 dark:hover:border-white/20 text-sm font-semibold transition"
     >
         Войти
     </a>
 
-    <div class="hero-shell min-h-screen bg-[#f5f5f8] dark:bg-[#05070b]">
-        <div class="hero-arcs" aria-hidden="true">
-            <svg class="hero-arcs-svg" viewBox="0 0 1600 1100" preserveAspectRatio="none">
-                <defs>
-                    <linearGradient id="arcWhite" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="#f8fafc" />
-                        <stop offset="72%" stop-color="#dce2f8" />
-                        <stop offset="100%" stop-color="#becaf2" />
-                    </linearGradient>
+    <section class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 sm:py-10 space-y-6">
+        <MainScheduleBoard client:load groups={apiGroups} />
 
-                    <linearGradient id="arcBlue" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stop-color="#a5b8ff" />
-                        <stop offset="100%" stop-color="#6f8ff0" />
-                    </linearGradient>
-                </defs>
-                <path
-                        class="arc-base arc-base-left"
-                        d="M 800 1180
-                        C 700 900, 560 580, 420 340
-                        C 260 120, 60 20, -200 20"
-                />
-                <path
-                        class="arc-base arc-base-right"
-                        d="M 800 1180
-                       C 880 920, 1020 720, 1180 560
-                       C 1350 420, 1500 340, 1650 300"
-                />
-
-                <path
-                        class="arc-trace arc-trace-left"
-                        d="M 800 1180
-                        C 700 900, 560 580, 420 340
-                        C 260 120, 60 20, -200 20"
-                />
-                <path
-                        class="arc-trace arc-trace-right"
-                        d="M 800 1180
-                       C 880 920, 1020 720, 1180 560
-                       C 1350 420, 1500 340, 1650 300"
-                />
-
-                <path
-                        class="arc-glow arc-glow-left"
-                        d="M 800 1180
-                        C 700 900, 560 580, 420 340
-                        C 260 120, 60 20, -200 20"
-                />
-                <path
-                        class="arc-glow arc-glow-right"
-                        d="M 800 1180
-                       C 880 920, 1020 720, 1180 560
-                       C 1350 420, 1500 340, 1650 300"
-                />
-            </svg>
-        </div>
-
-        <section class="relative z-10 pt-10 pb-8 sm:pt-14 sm:pb-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="max-w-4xl">
-                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-[-0.05em] text-slate-950 dark:text-white">
-                        Расписание пересдач
-                    </h1>
-
-                    <p class="mt-4 text-lg sm:text-xl text-slate-500 dark:text-slate-400 max-w-3xl">
-                        Найдите пересдачу по номеру группы
-                    </p>
-                </div>
+        <section class="space-y-3">
+            <div class="px-1">
+                <h2 class="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Пересдачи</h2>
             </div>
+
+            <StudentBoard
+                client:load
+                groups={apiGroups}
+                retakes={formattedRetakes}
+                today={today}
+            />
         </section>
-
-        <section id="board" class="relative z-10 pb-16 sm:pb-20">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)] p-4 sm:p-6 lg:p-8 dark:border-white/10 dark:bg-[#11151c]">
-                    <StudentBoard
-                            client:load
-                            groups={apiGroups}
-                            retakes={formattedRetakes}
-                            today={today}
-                    />
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <style is:global>
-        .hero-shell {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero-arcs {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .hero-arcs-svg {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        .arc-base,
-        .arc-trace,
-        .arc-glow {
-            fill: none;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            vector-effect: non-scaling-stroke;
-        }
-
-        .arc-base-left {
-            stroke: #cfd8f6;
-            stroke-width: 52;
-            opacity: 0.55;
-        }
-
-        .arc-base-right {
-            stroke: url(#arcBlue);
-            stroke-width: 52;
-            opacity: 0.25;
-        }
-
-        .arc-glow-left {
-            stroke: rgba(186, 202, 242, 0.35);
-            stroke-width: 90;
-            filter: blur(24px);
-            opacity: 0.22;
-        }
-
-        .arc-glow-right {
-            stroke: rgba(111,143,240,0.2);
-            stroke-width: 90;
-            filter: blur(24px);
-            opacity: 0.15;
-        }
-
-        .arc-trace {
-            opacity: 0;
-        }
-
-        .arc-trace-left {
-            stroke: #60a5fa;
-            stroke-width: 4;
-            filter: drop-shadow(0 0 8px rgba(96,165,250,0.5));
-            stroke-dasharray: 2400;
-            stroke-dashoffset: 2400;
-        }
-
-        .arc-trace-right {
-            stroke: #60a5fa;
-            stroke-width: 4;
-            filter: drop-shadow(0 0 10px rgba(96,165,250,0.5));
-            stroke-dasharray: 2000;
-            stroke-dashoffset: 2000;
-        }
-
-        .hero-shell.is-arc-animating .arc-trace-left {
-            animation: arcDrawLeft 1.7s cubic-bezier(.4,0,.2,1) forwards;
-        }
-
-        .hero-shell.is-arc-animating .arc-trace-right {
-            animation: arcDrawRight 1.7s cubic-bezier(.4,0,.2,1) forwards;
-        }
-
-        .hero-shell.is-arc-animating .arc-base-left {
-            animation: arcBasePulseLeft 1.7s ease;
-        }
-
-        .hero-shell.is-arc-animating .arc-base-right {
-            animation: arcBasePulseRight 1.7s ease;
-        }
-
-        .hero-shell.is-arc-animating .arc-glow-left,
-        .hero-shell.is-arc-animating .arc-glow-right {
-            animation: arcGlowPulse 1.5s ease;
-        }
-
-        @keyframes arcDrawLeft {
-            0% {
-                stroke-dashoffset: 2400;
-                opacity: 0;
-            }
-            12% {
-                opacity: 0.85;
-            }
-            78% {
-                stroke-dashoffset: 0;
-                opacity: 0.85;
-            }
-            100% {
-                stroke-dashoffset: 0;
-                opacity: 0.15;
-            }
-        }
-
-        @keyframes arcDrawRight {
-            0% {
-                stroke-dashoffset: 2000;
-                opacity: 0;
-            }
-            10% {
-                opacity: 1;
-            }
-            80% {
-                stroke-dashoffset: 0;
-                opacity: 1;
-            }
-            100% {
-                stroke-dashoffset: 0;
-                opacity: 0;
-            }
-        }
-
-        @keyframes arcBasePulseLeft {
-            0%, 100% {
-                opacity: 0.5;
-                filter: none;
-            }
-            50% {
-                opacity: 0.58;
-                filter: drop-shadow(0 0 14px rgba(185, 200, 246, 0.12));
-            }
-        }
-
-        @keyframes arcBasePulseRight {
-            0%, 100% {
-                opacity: 0.25;
-                filter: none;
-            }
-            50% {
-                opacity: 0.42;
-                filter: drop-shadow(0 0 20px rgba(152,178,255,0.16));
-            }
-        }
-
-        @keyframes arcGlowPulse {
-            0%, 100% {
-                opacity: 0.15;
-            }
-            50% {
-                opacity: 0.3;
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .hero-shell.is-arc-animating .arc-trace-left,
-            .hero-shell.is-arc-animating .arc-trace-right,
-            .hero-shell.is-arc-animating .arc-base-left,
-            .hero-shell.is-arc-animating .arc-base-right,
-            .hero-shell.is-arc-animating .arc-glow-left,
-            .hero-shell.is-arc-animating .arc-glow-right {
-                animation: none !important;
-            }
-        }
-    </style>
-
-    <script>
-        (() => {
-            const hero = document.querySelector('.hero-shell');
-            const triggers = document.querySelectorAll('[data-arc-trigger]');
-            if (!hero) return;
-
-            let resetTimer;
-            let intervalId;
-
-            const runAnimation = () => {
-                hero.classList.remove('is-arc-animating');
-                void hero.offsetWidth;
-                hero.classList.add('is-arc-animating');
-
-                clearTimeout(resetTimer);
-                resetTimer = setTimeout(() => {
-                    hero.classList.remove('is-arc-animating');
-                }, 1800);
-            };
-
-            triggers.forEach((el) => {
-                el.addEventListener('mouseenter', runAnimation);
-                el.addEventListener('focus', runAnimation);
-            });
-
-            runAnimation();
-            intervalId = setInterval(runAnimation, 10000);
-
-            window.addEventListener('beforeunload', () => {
-                clearTimeout(resetTimer);
-                clearInterval(intervalId);
-            });
-        })();
-    </script>
+    </section>
 </Layout>

@@ -41,26 +41,24 @@ const csrfToken = Astro.locals.csrfToken ?? '';
     <Fragment slot="nav-actions">
         <a
             href="/dashboard"
-            class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-white/80 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 hover:border-gray-400 dark:hover:border-white/15 backdrop-blur-xl text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
+            class="inline-flex items-center justify-center h-10 px-4 rounded-2xl border border-slate-300/80 dark:border-white/10 bg-[var(--panel-bg-strong)] dark:bg-[var(--panel-muted)] text-slate-800 dark:text-white text-sm font-semibold hover:border-slate-400 dark:hover:border-white/20 transition"
         >
             &larr; Дашборд
         </a>
     </Fragment>
 
     <section class="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div class="rounded-[32px] border border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.14)] overflow-hidden">
-            <div class="px-6 py-8 sm:px-8 sm:py-9 border-b border-slate-100 dark:border-white/10">
-                <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                    Профиль пользователя
-                </p>
-                <h1 class="mt-3 text-3xl sm:text-4xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
+        <div class="rounded-[32px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow-strong)] overflow-hidden">
+            <div class="px-6 py-8 sm:px-8 sm:py-9 border-b border-[var(--panel-border)]">
+                <p class="academic-kicker">Профиль пользователя</p>
+                <h1 class="mt-3 text-3xl sm:text-4xl academic-title text-slate-950 dark:text-white">
                     {displayName}
                 </h1>
                 <div class="mt-4 flex flex-wrap items-center gap-2">
-                    <span class="px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
+                    <span class="px-3 py-1 rounded-xl text-xs font-bold bg-[var(--panel-muted)] text-slate-700 dark:text-slate-300 border border-[var(--panel-border)]">
                         {roleLabel}
                     </span>
-                    <span class="font-mono text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 px-3 py-1 rounded-xl">
+                    <span class="tnum font-mono text-xs text-slate-500 dark:text-slate-400 bg-[var(--panel-muted)] border border-[var(--panel-border)] px-3 py-1 rounded-xl">
                         {user.username}
                     </span>
                 </div>
@@ -68,7 +66,7 @@ const csrfToken = Astro.locals.csrfToken ?? '';
                 {departmentNames.length > 0 && (
                     <div class="mt-4 flex flex-wrap gap-2">
                         {departmentNames.map((department) => (
-                            <span class="text-xs bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 px-3 py-1 rounded-full font-semibold">
+                            <span class="text-xs bg-[var(--accent-soft)] text-[var(--accent-strong)] border border-[var(--panel-border)] px-3 py-1 rounded-full font-semibold">
                                 {department}
                             </span>
                         ))}
@@ -83,14 +81,12 @@ const csrfToken = Astro.locals.csrfToken ?? '';
                             Для продолжения работы нужно сменить стартовый пароль.
                         </div>
                     )}
-                    <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500 font-bold">
-                        Безопасность
-                    </p>
-                    <h2 class="mt-2 text-xl sm:text-2xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
+                    <p class="academic-kicker">Безопасность</p>
+                    <h2 class="mt-2 text-xl sm:text-2xl academic-title text-slate-950 dark:text-white">
                         Смена пароля
                     </h2>
                     <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-lg leading-7">
-                        Пароль обновляется через backend endpoint и больше не использует Astro actions или Lucia.
+                        Пароль обновляется через backend endpoint и сразу применяется к текущей учётной записи.
                     </p>
                 </div>
 
@@ -101,17 +97,17 @@ const csrfToken = Astro.locals.csrfToken ?? '';
                         <label for="currentPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
                             Текущий пароль
                         </label>
-                        <input id="currentPassword" name="currentPassword" type="password" required class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
+                        <input id="currentPassword" name="currentPassword" type="password" required class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-[var(--panel-bg-strong)] dark:bg-[var(--panel-muted)] dark:text-white focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-600 dark:focus:border-sky-400 transition-all" />
                     </div>
 
                     <div>
                         <label for="newPassword" class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
                             Новый пароль
                         </label>
-                        <input id="newPassword" name="newPassword" type="password" required minlength="6" class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-white dark:bg-white/[0.03] dark:text-white focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-400 dark:focus:border-red-500 transition-all" />
+                        <input id="newPassword" name="newPassword" type="password" required minlength="6" class="w-full h-12 px-4 border border-slate-300 dark:border-white/10 rounded-2xl text-sm bg-[var(--panel-bg-strong)] dark:bg-[var(--panel-muted)] dark:text-white focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-600 dark:focus:border-sky-400 transition-all" />
                     </div>
 
-                    <button id="submit-btn" type="submit" class="h-12 px-6 bg-red-500 hover:bg-red-600 text-white text-sm font-black rounded-2xl shadow-[0_16px_40px_rgba(239,68,68,0.22)] transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                    <button id="submit-btn" type="submit" class="h-12 px-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-sm font-black rounded-2xl shadow-[var(--panel-shadow)] transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                         <span>Сохранить</span>
                     </button>
                 </form>
@@ -158,7 +154,7 @@ const csrfToken = Astro.locals.csrfToken ?? '';
             if (!response.ok) {
                 const payload = await response.json().catch(() => ({}));
                 if (statusDiv) {
-                    statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20';
+                    statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/20';
                     statusDiv.textContent = payload.detail ?? 'Не удалось обновить пароль';
                 }
                 return;
@@ -166,7 +162,7 @@ const csrfToken = Astro.locals.csrfToken ?? '';
 
             const payload = await response.json();
             if (statusDiv) {
-                statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20';
+                statusDiv.className = 'rounded-2xl px-4 py-3.5 text-sm font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20';
                 statusDiv.textContent = payload.message;
             }
             form.reset();

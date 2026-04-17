@@ -679,15 +679,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6 relative">
+  <section class="admin-shell max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6 relative">
     <!-- Header -->
-    <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 mb-6">
+    <div class="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 mb-6 shadow-[var(--panel-shadow)]">
       <div class="flex justify-between items-end">
         <div>
-          <p class="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-bold">Администрирование</p>
-          <h1 class="text-3xl font-black text-slate-900 dark:text-white mt-2">Панель администратора</h1>
+          <p class="academic-kicker">Администрирование</p>
+          <h1 class="text-3xl academic-title text-slate-900 dark:text-white mt-2">Панель администратора</h1>
         </div>
-        <button @click="reloadAll" :disabled="busy.reload" class="px-5 py-2.5 bg-white dark:bg-white/10 border border-slate-300 dark:border-white/10 rounded-2xl text-sm font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-white/20 transition-colors disabled:opacity-50">
+        <button @click="reloadAll" :disabled="busy.reload" class="px-5 py-2.5 bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-2xl text-sm font-bold shadow-[var(--panel-shadow)] hover:bg-[var(--panel-muted)] transition-colors disabled:opacity-50">
           {{ busy.reload ? 'Обновление...' : 'Обновить данные' }}
         </button>
       </div>
@@ -697,38 +697,38 @@ onMounted(() => {
     </div>
 
     <!-- Tabs -->
-    <div class="flex space-x-6 border-b border-slate-200 dark:border-white/10 overflow-x-auto">
+    <div class="inline-flex gap-2 rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-2 shadow-[var(--panel-shadow)] overflow-x-auto">
       <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
-              :class="['pb-4 text-sm font-bold transition-colors whitespace-nowrap', activeTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300']">
+              :class="['px-4 py-2.5 rounded-2xl text-sm font-bold transition whitespace-nowrap border', activeTab === tab.id ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white' : 'text-slate-500 border-transparent hover:text-slate-800 dark:hover:text-slate-300 hover:bg-[var(--panel-muted)] hover:border-[var(--panel-border)]']">
         {{ tab.label }}
       </button>
     </div>
 
     <!-- ==================== TEACHERS TAB ==================== -->
-    <div v-if="activeTab === 'teachers'" class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
+    <div v-if="activeTab === 'teachers'" class="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-[var(--panel-shadow)]">
       <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
         <div>
           <h2 class="text-xl font-black text-slate-900 dark:text-white">Справочник преподавателей</h2>
           <p class="text-xs text-slate-500 mt-1">Всего: {{ teacherDirectory.length }} | С аккаунтом: {{ users.filter(u => u.teacherUuid).length }}</p>
         </div>
         <div class="flex gap-2">
-          <button @click="syncTeachersFromApi" :disabled="busy.syncTeachers" class="px-4 py-2 border border-slate-300 dark:border-white/20 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50 transition-colors">
+          <button @click="syncTeachersFromApi" :disabled="busy.syncTeachers" class="px-4 py-2 border border-[var(--panel-border)] rounded-xl text-sm font-bold hover:bg-[var(--panel-muted)] disabled:opacity-50 transition-colors">
             {{ busy.syncTeachers ? '⏳ Загрузка...' : '🔄 Подтянуть из API' }}
           </button>
-          <button @click="showTeacherModal = true" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all">+ Добавить</button>
+          <button @click="showTeacherModal = true" class="px-5 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-sm font-bold transition-all">+ Добавить</button>
         </div>
       </div>
 
       <!-- Search -->
       <div class="mb-4">
         <input v-model="teacherSearchQuery" @input="teacherPage = 0" type="text" placeholder="Поиск по ФИО..."
-               class="w-full sm:w-80 h-10 px-4 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm dark:text-white outline-none focus:border-blue-400 transition-colors" />
+               class="w-full sm:w-80 h-10 px-4 rounded-xl border border-slate-300 dark:border-white/10 bg-[var(--panel-bg-strong)] dark:bg-[var(--panel-muted)] text-sm dark:text-white outline-none focus:border-sky-600 transition-colors" />
       </div>
 
       <!-- Table -->
-      <div class="overflow-x-auto rounded-2xl border border-slate-100 dark:border-white/5">
+      <div class="overflow-x-auto rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)]">
         <table class="w-full text-sm text-left">
-          <thead class="bg-slate-50 dark:bg-black/20 text-slate-600 dark:text-slate-400">
+          <thead class="bg-[var(--panel-muted)] text-slate-600 dark:text-slate-400">
           <tr>
             <th class="px-5 py-3 font-bold">ФИО</th>
             <th class="px-5 py-3 font-bold">Кафедры</th>
@@ -1188,3 +1188,20 @@ onMounted(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.admin-shell :is(.rounded-3xl, .rounded-\[24px\]) {
+  border-radius: 22px !important;
+  box-shadow: var(--panel-shadow) !important;
+  border-color: var(--panel-border) !important;
+  background: var(--panel-bg) !important;
+}
+
+.admin-shell :is(.rounded-2xl, .rounded-\[22px\]) {
+  border-radius: 18px !important;
+}
+
+.admin-shell table thead {
+  background: var(--panel-muted) !important;
+}
+</style>
