@@ -19,7 +19,7 @@ from app.core.request_security import (
 )
 from app.core.validation_errors import format_request_validation_error
 import asyncio
-from app.tasks.semester_tasks import auto_archive_loop
+from app.tasks.scheduler import start_scheduler
 
 # FastAPI + Pydantic on Python 3.14 emits this warning while composing request/response models,
 # even though the generated OpenAPI/body schemas work correctly with our camelCase contract.
@@ -37,8 +37,8 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    # Эта строчка запускает наш вечный цикл на заднем фоне при старте сервера
-    asyncio.create_task(auto_archive_loop())
+    # Запускаем умный планировщик при старте
+    start_scheduler()
 
 class RequestHardeningMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

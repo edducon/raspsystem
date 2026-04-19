@@ -562,19 +562,35 @@ async function syncCurrentSchedule() {
 
   busy.syncSchedule = true;
   try {
-    // Вызываем наш новый эндпоинт
     await fetchBackendFromBrowser<any>(props.backendApiUrl, '/schedule-snapshots/sync', {
       method: 'POST',
     });
 
     setStatus('success', 'Текущее расписание успешно загружено и установлено как активное!');
-
-    // Перезагружаем все данные на странице, чтобы новый снимок появился в списке
     await reloadAll();
   } catch (error) {
     setStatus('error', errorText(error, 'Не удалось синхронизировать расписание из Raspyx.'));
   } finally {
     busy.syncSchedule = false;
+  }
+}
+
+async function setSnapshotAsReference(rawIdStr: string) {
+  const snapshotId = Number(rawIdStr.replace('snapshot-', ''));
+  if (isNaN(snapshotId)) return;
+
+  if (!window.confirm('Назначить этот семестр текущим эталоном для пересдач? Все новые пересдачи будут использовать его расписание.')) {
+    return;
+  }
+
+  try {
+    await fetchBackendFromBrowser(props.backendApiUrl, `/schedule-snapshots/${snapshotId}/set-reference`, {
+      method: 'POST'
+    });
+    setStatus('success', 'Снимок успешно назначен эталоном!');
+    await reloadAll();
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось сменить эталон.'));
   }
 }
 
@@ -1051,7 +1067,19 @@ onMounted(() => {
               <p>Период: {{ item.dateRangeStart && item.dateRangeEnd ? `${formatDateOnly(item.dateRangeStart)} - ${formatDateOnly(item.dateRangeEnd)}` : 'Диапазон дат не найден в данных расписания' }}</p>
               <p v-if="item.kind === 'snapshot'">Фиксация: {{ formatDateTime(item.capturedAt) }} | Создан: {{ formatDateTime(item.createdAt) }}</p>
             </div>
-            <button v-if="item.deletePath" @click="deleteEntity(item.deletePath, 'Снимок удалён')" class="mt-3 text-red-500 font-bold text-xs hover:text-red-700">Удалить</button>
+                        <div class="mt-4 flex flex-wrap items-center gap-3">
+              <button v-if="item.kind === 'snapshot' && !item.isReferenceForRetakes"
+                      @click="setSnapshotAsReference(item.id)"
+                      class="px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 font-bold text-xs rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors border border-blue-200 dark:border-blue-800/30">
+                Сделать эталоном
+              </button>
+
+              <button v-if="item.deletePath"
+                      @click="deleteEntity(item.deletePath, 'Снимок удалён')"
+                      class="px-3 py-1.5 text-red-500 font-bold text-xs hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                Удалить
+              </button>
+            </div>
           </div>
         </div>
       </div>
