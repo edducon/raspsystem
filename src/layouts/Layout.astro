@@ -38,49 +38,64 @@ const csrfToken = Astro.locals.csrfToken ?? "";
 
 <body class="min-h-screen font-sans antialiased flex flex-col text-slate-900 dark:text-slate-100">
 <div class="page-bg" aria-hidden="true"></div>
-<div class="page-grid" aria-hidden="true"></div>
-<div class="page-lines" aria-hidden="true">
+
+<div class="page-orbits" aria-hidden="true">
     <svg viewBox="0 0 1600 1200" preserveAspectRatio="none">
         <defs>
-            <linearGradient id="layoutLine" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="rgba(67, 87, 120, 0.04)" />
-                <stop offset="52%" stop-color="rgba(67, 87, 120, 0.28)" />
-                <stop offset="100%" stop-color="rgba(67, 87, 120, 0.08)" />
+            <linearGradient id="orbitStrong" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(102, 146, 255, 0.00)" />
+                <stop offset="30%" stop-color="rgba(102, 146, 255, 0.10)" />
+                <stop offset="55%" stop-color="rgba(102, 146, 255, 0.34)" />
+                <stop offset="75%" stop-color="rgba(102, 146, 255, 0.18)" />
+                <stop offset="100%" stop-color="rgba(102, 146, 255, 0.00)" />
             </linearGradient>
-            <linearGradient id="layoutAccent" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="rgba(77, 122, 184, 0.08)" />
-                <stop offset="100%" stop-color="rgba(77, 122, 184, 0.26)" />
+
+            <linearGradient id="orbitSoft" x1="1" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(121, 166, 255, 0.00)" />
+                <stop offset="38%" stop-color="rgba(121, 166, 255, 0.08)" />
+                <stop offset="65%" stop-color="rgba(121, 166, 255, 0.18)" />
+                <stop offset="100%" stop-color="rgba(121, 166, 255, 0.00)" />
             </linearGradient>
-            <marker id="layoutArrow" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(67, 87, 120, 0.22)"></path>
-            </marker>
+
+            <linearGradient id="orbitGlow" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0%" stop-color="rgba(121, 166, 255, 0.00)" />
+                <stop offset="50%" stop-color="rgba(121, 166, 255, 0.14)" />
+                <stop offset="100%" stop-color="rgba(121, 166, 255, 0.00)" />
+            </linearGradient>
         </defs>
-        <path id="layoutPathOne" class="line-track line-track-one" d="M -120 230 C 180 120, 360 140, 590 320 S 1130 650, 1710 510" />
-        <path id="layoutPathTwo" class="line-track line-track-two" d="M -40 980 C 260 880, 480 810, 730 650 S 1210 300, 1650 220" />
-        <path class="line-track line-track-three" d="M 540 -60 C 620 220, 650 460, 730 690 S 930 1090, 1160 1280" />
-        <path class="line-trace" d="M -120 230 C 180 120, 360 140, 590 320 S 1130 650, 1710 510" marker-end="url(#layoutArrow)" />
-        <path class="line-accent" d="M -40 980 C 260 880, 480 810, 730 650 S 1210 300, 1650 220" />
-        <text class="line-label">
-            <textPath href="#layoutPathOne" startOffset="-10%">
-                241-362 • 221-361 • СЕССИЯ • КОМИССИЯ • Б-304 •
-                <animate attributeName="startOffset" values="-10%;110%" dur="34s" repeatCount="indefinite" />
-            </textPath>
-        </text>
-        <text class="line-label line-label-secondary">
-            <textPath href="#layoutPathTwo" startOffset="18%">
-                РАСПИСАНИЕ • ЭКЗАМЕН • А-205 • ИВТ-21 • ПАРА 3 •
-                <animate attributeName="startOffset" values="18%;128%" dur="38s" repeatCount="indefinite" />
-            </textPath>
-        </text>
+
+        <g class="orbit-group orbit-group-a">
+            <path
+                    class="orbit orbit-soft"
+                    d="M -120 1040 C 180 860, 430 760, 710 670 C 980 584, 1210 472, 1540 210"
+            />
+            <path
+                    class="orbit orbit-glow"
+                    d="M -180 1100 C 140 900, 410 780, 730 690 C 1010 610, 1240 500, 1600 170"
+            />
+        </g>
+
+        <g class="orbit-group orbit-group-b">
+            <path
+                    class="orbit orbit-strong"
+                    d="M 900 1280 C 880 1020, 950 820, 1130 660 C 1290 518, 1450 418, 1710 360"
+            />
+        </g>
+
+        <g class="orbit-group orbit-group-c">
+            <path
+                    class="orbit orbit-soft"
+                    d="M 280 -140 C 430 30, 560 180, 660 360 C 770 560, 840 790, 900 1280"
+            />
+        </g>
+
+        <g class="orbit-group orbit-group-d">
+            <path
+                    class="orbit orbit-faint"
+                    d="M -140 430 C 160 390, 430 340, 730 170 C 1020 5, 1260 -110, 1540 -70"
+            />
+        </g>
     </svg>
-</div>
-<div class="page-floaters" aria-hidden="true">
-    <span class="floater floater-a">241-362</span>
-    <span class="floater floater-b">221-361</span>
-    <span class="floater floater-c">Комиссия</span>
-    <span class="floater floater-d">Сессия</span>
-    <span class="floater floater-e">Б-304</span>
-    <span class="floater floater-f">Экзамен</span>
 </div>
 
 <header class="sticky top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
@@ -89,9 +104,9 @@ const csrfToken = Astro.locals.csrfToken ?? "";
             <a href="/" class="flex items-center gap-3 shrink-0 group">
                 <div class="brand-mark">
                     <img
-                        src="/image/logo.png"
-                        alt="Логотип университета"
-                        class="w-8 h-8 object-contain"
+                            src="/image/logo.png"
+                            alt="Логотип университета"
+                            class="w-8 h-8 object-contain"
                     />
                 </div>
 
@@ -115,10 +130,10 @@ const csrfToken = Astro.locals.csrfToken ?? "";
                 <div class="hidden sm:block w-px h-6 bg-slate-200/80 dark:bg-white/10 mx-1"></div>
 
                 <button
-                    id="theme-toggle"
-                    class="theme-button"
-                    title="Переключить тему"
-                    aria-label="Переключить тему"
+                        id="theme-toggle"
+                        class="theme-button"
+                        title="Переключить тему"
+                        aria-label="Переключить тему"
                 >
                     <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
@@ -227,13 +242,11 @@ const csrfToken = Astro.locals.csrfToken ?? "";
 <style is:global>
     :root {
         color-scheme: light;
-        --page-bg: linear-gradient(180deg, #f3efe8 0%, #eeebe4 52%, #e8e4dc 100%);
-        --page-grid: linear-gradient(rgba(92, 104, 124, 0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(92, 104, 124, 0.06) 1px, transparent 1px);
-        --panel-bg: rgba(255, 252, 247, 0.96);
-        --panel-bg-strong: #fffdf9;
-        --panel-muted: rgba(246, 241, 233, 0.92);
-        --panel-border: rgba(103, 112, 130, 0.16);
+        --page-bg: #ffffff;
+        --panel-bg: rgba(255, 255, 255, 0.74);
+        --panel-bg-strong: rgba(255, 255, 255, 0.86);
+        --panel-muted: rgba(247, 249, 252, 0.78);
+        --panel-border: rgba(103, 112, 130, 0.14);
         --panel-border-strong: rgba(63, 73, 92, 0.18);
         --panel-shadow: 0 8px 24px rgba(33, 38, 45, 0.06), 0 1px 3px rgba(33, 38, 45, 0.05);
         --panel-shadow-strong: 0 14px 30px rgba(33, 38, 45, 0.08), 0 2px 6px rgba(33, 38, 45, 0.06);
@@ -250,11 +263,9 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     html.dark {
         color-scheme: dark;
         --page-bg: linear-gradient(180deg, #11161c 0%, #161b22 48%, #0f141b 100%);
-        --page-grid: linear-gradient(rgba(183, 197, 219, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(183, 197, 219, 0.05) 1px, transparent 1px);
-        --panel-bg: rgba(20, 26, 35, 0.92);
-        --panel-bg-strong: #171d25;
-        --panel-muted: rgba(27, 34, 45, 0.9);
+        --panel-bg: rgba(20, 26, 35, 0.78);
+        --panel-bg-strong: rgba(23, 29, 37, 0.88);
+        --panel-muted: rgba(27, 34, 45, 0.72);
         --panel-border: rgba(214, 223, 235, 0.1);
         --panel-border-strong: rgba(214, 223, 235, 0.16);
         --panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.16);
@@ -282,88 +293,104 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     }
 
     .page-bg,
-    .page-grid,
-    .page-lines {
+    .page-orbits {
         position: fixed;
         inset: 0;
         pointer-events: none;
         z-index: 0;
     }
 
-    .page-grid {
-        background-image: var(--page-grid);
-        background-size: 48px 48px;
-        opacity: 0.24;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+    .page-orbits {
+        overflow: hidden;
+        opacity: 1;
     }
 
-    .page-lines svg {
+    .page-orbits svg {
         width: 100%;
         height: 100%;
         display: block;
     }
 
-    .line-track,
-    .line-trace,
-    .line-accent {
+    .orbit-group {
+        transform-origin: center;
+        will-change: transform, opacity;
+    }
+
+    .orbit-group-a {
+        animation: orbitFloatA 15s ease-in-out infinite alternate;
+    }
+
+    .orbit-group-b {
+        animation: orbitFloatB 19s ease-in-out infinite alternate;
+    }
+
+    .orbit-group-c {
+        animation: orbitFloatC 17s ease-in-out infinite alternate;
+    }
+
+    .orbit-group-d {
+        animation: orbitFloatD 21s ease-in-out infinite alternate;
+    }
+
+    .orbit {
         fill: none;
         vector-effect: non-scaling-stroke;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        will-change: stroke-dashoffset, opacity, transform;
     }
 
-    .line-track {
-        stroke: url(#layoutLine);
-        stroke-width: 1.6;
-        stroke-dasharray: 10 14;
+    .orbit-strong {
+        stroke: url(#orbitStrong);
+        stroke-width: 16;
+        opacity: 0.9;
+        filter: blur(0.2px);
+        stroke-dasharray: 220 32;
+        animation: orbitDashStrong 14s linear infinite;
     }
 
-    .line-track-three {
-        opacity: 0.65;
+    .orbit-soft {
+        stroke: url(#orbitSoft);
+        stroke-width: 10;
+        opacity: 0.68;
+        filter: blur(0.3px);
+        stroke-dasharray: 160 28;
+        animation: orbitDashSoft 18s linear infinite;
     }
 
-    .line-trace {
-        stroke: rgba(76, 109, 154, 0.32);
-        stroke-width: 2.1;
-        stroke-dasharray: 10 18;
-        animation: pageLineDrift 18s linear infinite;
-    }
-
-    .line-accent {
-        stroke: url(#layoutAccent);
+    .orbit-glow {
+        stroke: url(#orbitGlow);
         stroke-width: 36;
-        filter: blur(38px);
-        opacity: 0.24;
+        opacity: 0.16;
+        filter: blur(16px);
+        stroke-dasharray: 260 40;
+        animation: orbitDashGlow 24s linear infinite;
     }
 
-    html.dark .line-track {
-        opacity: 0.85;
+    .orbit-faint {
+        stroke: rgba(130, 166, 235, 0.12);
+        stroke-width: 8;
+        opacity: 0.5;
+        filter: blur(0.4px);
+        stroke-dasharray: 90 24;
+        animation: orbitDashFaint 20s linear infinite;
     }
 
-    html.dark .line-trace {
-        stroke: rgba(153, 184, 223, 0.28);
+    html.dark .orbit-strong {
+        opacity: 0.7;
     }
 
-    .page-floaters {
-        display: none;
+    html.dark .orbit-soft {
+        opacity: 0.52;
     }
 
-    .line-label {
-        fill: rgba(62, 73, 89, 0.42);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+    html.dark .orbit-glow {
+        opacity: 0.14;
     }
 
-    .line-label-secondary {
-        fill: rgba(92, 125, 166, 0.44);
-    }
-
-    html.dark .line-label {
-        fill: rgba(214, 223, 235, 0.26);
-    }
-
-    html.dark .line-label-secondary {
-        fill: rgba(153, 184, 223, 0.28);
+    html.dark .orbit-faint {
+        stroke: rgba(148, 181, 223, 0.10);
+        opacity: 0.4;
     }
 
     .nav-shell,
@@ -372,7 +399,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         background: var(--panel-bg);
         box-shadow: var(--panel-shadow);
         border-radius: 18px;
-        backdrop-filter: none;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
     }
 
     .nav-shell {
@@ -386,13 +414,15 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(180deg, #ffffff 0%, #f2eee8 100%);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 248, 252, 0.82) 100%);
         border: 1px solid rgba(103, 112, 130, 0.14);
         box-shadow: 0 6px 16px rgba(30, 36, 44, 0.08);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
 
     html.dark .brand-mark {
-        background: linear-gradient(180deg, #1f2731 0%, #171d25 100%);
+        background: linear-gradient(180deg, rgba(31, 39, 49, 0.92) 0%, rgba(23, 29, 37, 0.78) 100%);
         border-color: rgba(214, 223, 235, 0.1);
     }
 
@@ -407,6 +437,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         background: var(--panel-muted);
         border: 1px solid var(--panel-border);
         transition: transform 0.22s ease, color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
 
     .theme-button:hover {
@@ -452,6 +484,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         background: var(--panel-bg);
         box-shadow: var(--panel-shadow);
         border-radius: 22px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
     }
 
     .academic-section {
@@ -459,12 +493,16 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         background: var(--panel-bg-strong);
         box-shadow: var(--panel-shadow);
         border-radius: 18px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
     }
 
     .academic-muted {
         background: var(--panel-muted);
         border: 1px solid var(--panel-border);
         border-radius: 22px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
 
     .academic-kicker {
@@ -490,17 +528,110 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
     }
 
-    @keyframes pageLineDrift {
+    @keyframes orbitDashStrong {
         from {
             stroke-dashoffset: 0;
         }
         to {
-            stroke-dashoffset: -280;
+            stroke-dashoffset: -504;
+        }
+    }
+
+    @keyframes orbitDashSoft {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: 376;
+        }
+    }
+
+    @keyframes orbitDashGlow {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: -600;
+        }
+    }
+
+    @keyframes orbitDashFaint {
+        from {
+            stroke-dashoffset: 0;
+        }
+        to {
+            stroke-dashoffset: 228;
+        }
+    }
+
+    @keyframes orbitFloatA {
+        from {
+            transform: translate3d(0, 0, 0) scale(1);
+        }
+        to {
+            transform: translate3d(24px, -14px, 0) scale(1.018);
+        }
+    }
+
+    @keyframes orbitFloatB {
+        from {
+            transform: translate3d(0, 0, 0) scale(1);
+        }
+        to {
+            transform: translate3d(-20px, 16px, 0) scale(1.02);
+        }
+    }
+
+    @keyframes orbitFloatC {
+        from {
+            transform: translate3d(0, 0, 0);
+            opacity: 0.52;
+        }
+        to {
+            transform: translate3d(16px, -20px, 0);
+            opacity: 0.72;
+        }
+    }
+
+    @keyframes orbitFloatD {
+        from {
+            transform: translate3d(0, 0, 0);
+            opacity: 0.38;
+        }
+        to {
+            transform: translate3d(-16px, 10px, 0);
+            opacity: 0.56;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .page-orbits {
+            opacity: 0.78;
+        }
+
+        .orbit-strong {
+            stroke-width: 12;
+        }
+
+        .orbit-soft,
+        .orbit-faint {
+            stroke-width: 7;
+        }
+
+        .orbit-glow {
+            stroke-width: 24;
         }
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .line-trace {
+        .orbit-group-a,
+        .orbit-group-b,
+        .orbit-group-c,
+        .orbit-group-d,
+        .orbit-strong,
+        .orbit-soft,
+        .orbit-glow,
+        .orbit-faint {
             animation: none !important;
         }
     }
