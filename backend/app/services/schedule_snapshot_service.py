@@ -13,6 +13,8 @@ from app.schemas.schedule_snapshot import (
     ScheduleSnapshotListRead,
     ScheduleSnapshotRead,
 )
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from app.services.raspyx_service import RaspyxService
 
 
 DATE_VALUE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -261,3 +263,165 @@ class ScheduleSnapshotService:
 
         visit(value)
         return result
+
+    def activate_latest_as_reference(self) -> None:
+        """Находит самый последний скачанный снимок и делает его эталоном (вызывается 1 февраля и 1 сентября)"""
+        latest_snapshot = self.db.scalar(
+            select(ScheduleSnapshot).order_by(ScheduleSnapshot.created_at.desc()).limit(1)
+        )
+        if latest_snapshot:
+            self._clear_reference_flag(exclude_snapshot_id=None)
+            latest_snapshot.is_reference_for_retakes = True
+            latest_snapshot.status = "active"
+            self.db.commit()
+            print(
+                f"[Service] Снимок ID {latest_snapshot.id} ({latest_snapshot.semester_label}) успешно назначен эталоном!")
+
+    def sync_from_raspyx(self) -> ScheduleSnapshotRead | None:
+        now = datetime.now(UTC)
+        # Определяем, какой семестр сейчас идет по календарю
+        if 2 <= now.month <= 7:
+            sem_start = f"{now.year}-02-09"
+            sem_end = f"{now.year}-07-15"
+            sem_label = f"Весенний семестр {now.year}"
+        else:
+            start_year = now.year if now.month >= 8 else now.year - 1
+            sem_start = f"{start_year}-09-01"
+            sem_end = f"{start_year + 1}-01-31"
+            sem_label = f"Осенний семестр {start_year}/{start_year + 1}"
+
+        raspyx = RaspyxService()
+
+        # 1. Скачиваем данные из Go
+        schedule_payload = raspyx.get_all_schedule(is_session=False)
+
+        raw_items = schedule_payload.get("result") or schedule_payload.get("response") or []
+        if not isinstance(raw_items, list):
+            raw_items = schedule_payload if isinstance(schedule_payload, list) else []
+
+        if not raw_items or len(raw_items) < 100:
+            print(f"[Sync] Получено пустое или неполное расписание ({len(raw_items)} пар). Отмена сохранения.")
+            return None
+
+        groups_map, subjects_map, teachers_map, schedule_items = {}, {}, {}, []
+
+        # 2. Собираем данные (цикл парсинга)
+        for item in raw_items:
+            if not isinstance(item, dict): continue
+
+            group_data = item.get("group") or {}
+            group_num = str(group_data.get("number") or "").strip()
+            group_uuid = str(group_data.get("uuid") or group_num).strip()
+            if group_uuid and group_uuid not in groups_map:
+                groups_map[group_uuid] = {"uuid": group_uuid, "number": group_num}
+
+            subj_data = item.get("subject") or {}
+            subj_name = str(subj_data.get("name") or "").strip()
+            subj_uuid = str(subj_data.get("uuid") or subj_name).strip()
+            if subj_uuid and subj_uuid not in subjects_map:
+                subjects_map[subj_uuid] = {"uuid": subj_uuid, "name": subj_name}
+
+            teacher_uuids = []
+            for t in (item.get("teachers") or []):
+                t_name = str(t.get("full_name") or "").strip()
+                t_uuid = str(t.get("uuid") or t_name).strip()
+                if t_uuid and t_uuid not in teachers_map:
+                    teachers_map[t_uuid] = {"uuid": t_uuid, "full_name": t_name}
+                teacher_uuids.append(t_uuid)
+
+            rooms_data = item.get("rooms") or []
+            room_str = ", ".join([str(r.get("number") or "") for r in rooms_data if r.get("number")])
+
+            start_time_str = str(item.get("start_time") or "")
+            slot = 1
+            if "09:00" in start_time_str:
+                slot = 1
+            elif "10:40" in start_time_str:
+                slot = 2
+            elif "12:20" in start_time_str:
+                slot = 3
+            elif "14:30" in start_time_str:
+                slot = 4
+            elif "16:10" in start_time_str:
+                slot = 5
+            elif "17:50" in start_time_str:
+                slot = 6
+            elif "19:30" in start_time_str:
+                slot = 7
+
+            schedule_items.append({
+                "start_date": sem_start,
+                "end_date": sem_end,
+                "weekday": int(item.get("weekday") or 1),
+                "slot": slot,
+                "group_uuid": group_uuid,
+                "subject_uuid": subj_uuid,
+                "teacher_uuids": teacher_uuids,
+                "room": room_str
+            })
+
+        # 3. БЕЗОПАСНАЯ ЛОГИКА ЭТАЛОНА
+        # Ищем, есть ли в базе уже хоть какой-то эталон
+        current_reference = self.db.scalar(
+            select(ScheduleSnapshot).where(ScheduleSnapshot.is_reference_for_retakes.is_(True))
+        )
+
+        # Если эталона вообще нет (самый первый запуск системы), разрешаем сделать этот снимок эталоном
+        is_first_launch = current_reference is None
+
+        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
+        snapshot_data = ScheduleSnapshotCreate(
+            name=f"Синхронизация от {now_str}",
+            semester_label=sem_label,
+            status="active" if is_first_launch else "archived",
+            source_type="raspyx",
+            is_reference_for_retakes=is_first_launch,  # Истина ТОЛЬКО при холодном старте
+            groups=list(groups_map.values()),
+            subjects=list(subjects_map.values()),
+            teachers=list(teachers_map.values()),
+            schedule_items=schedule_items
+        )
+
+        # 4. Сохраняем данные (не трогая чужие эталоны)
+        if is_first_launch:
+            print(f"[Sync] Холодный старт! Создаем первый в истории эталон: {sem_label}")
+            return self.create_snapshot(snapshot_data)
+        else:
+            # Ищем, есть ли уже архивный снимок ТЕКУЩЕГО скачиваемого семестра
+            existing_archived = self.db.scalar(
+                select(ScheduleSnapshot)
+                .where(
+                    ScheduleSnapshot.semester_label == sem_label,
+                    ScheduleSnapshot.is_reference_for_retakes.is_(False)
+                )
+                .order_by(ScheduleSnapshot.created_at.desc())
+                .limit(1)
+            )
+
+            if existing_archived:
+                print(f"[Sync] Обновляем фоновый архивный снимок (ID: {existing_archived.id})")
+                return self.update_snapshot(existing_archived.id, snapshot_data)
+            else:
+                print(f"[Sync] Создаем новый фоновый архивный снимок для: {sem_label}")
+                return self.create_snapshot(snapshot_data)
+
+    def set_as_reference(self, snapshot_id: int) -> ScheduleSnapshotRead:
+        """
+        Принудительно назначает указанный снимок эталонным для пересдач.
+        Используется для ручного управления через кнопку в админке.
+        """
+        # 1. Получаем целевой снимок
+        snapshot = self._get_snapshot_model(snapshot_id)
+
+        # 2. Снимаем флаг эталона со всех остальных записей в базе
+        self._clear_reference_flag(exclude_snapshot_id=snapshot_id)
+
+        # 3. Устанавливаем статус и флаг для выбранного снимка
+        snapshot.is_reference_for_retakes = True
+        snapshot.status = "active"
+
+        self.db.commit()
+        self.db.refresh(snapshot)
+
+        print(f"[Service] Снимок ID {snapshot_id} ({snapshot.semester_label}) назначен эталоном вручную.")
+        return self._serialize_detail(snapshot)

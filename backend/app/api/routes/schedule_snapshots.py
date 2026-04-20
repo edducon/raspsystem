@@ -10,6 +10,14 @@ from app.services.schedule_snapshot_service import ScheduleSnapshotService
 router = APIRouter(prefix="/schedule-snapshots", tags=["schedule-snapshots"])
 
 
+@router.post("/sync", response_model=ScheduleSnapshotRead)
+def sync_schedule_from_raspyx(db: Session = Depends(get_db)):
+    """
+    Скачивает всё текущее расписание из Raspyx и создает активный снимок.
+    """
+    service = ScheduleSnapshotService(db)
+    return service.sync_from_raspyx()
+
 @router.get("/", response_model=list[ScheduleSnapshotListRead])
 def list_snapshots(
     _: object = Depends(require_admin),
@@ -89,3 +97,20 @@ def delete_snapshot(
         details={"name": snapshot.name, "semester_label": snapshot.semester_label},
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post(
+    "/{snapshot_id}/set-reference",
+    response_model=ScheduleSnapshotRead,
+    summary="Назначить снимок эталонным вручную",
+)
+def set_snapshot_as_reference(
+    snapshot_id: int,
+    current_admin: object = Depends(require_admin),  # <-- Используем вашу родную проверку!
+    db: Session = Depends(get_db),
+) -> ScheduleSnapshotRead:
+    """
+    Переключает эталонную модель на выбранный снимок.
+    Доступно только администраторам.
+    """
+    service = ScheduleSnapshotService(db)
+    return service.set_as_reference(snapshot_id)

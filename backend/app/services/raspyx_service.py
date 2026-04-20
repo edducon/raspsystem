@@ -81,7 +81,8 @@ class RaspyxService:
                     "password": settings.raspyx_password,
                 },
             )
-        except Exception:
+        except Exception as e:
+            print(f"!!! ОШИБКА АВТОРИЗАЦИИ: {e}")
             return "offline_mock_token"
 
         token = None
@@ -115,3 +116,7 @@ class RaspyxService:
     def get_teacher_schedule(self, teacher_full_name: str, *, is_session: bool = False) -> object:
         encoded = parse.quote(teacher_full_name)
         return self._cached_get(f"/schedule/teacher_fio/{encoded}?is_session={str(is_session).lower()}")
+
+    def get_all_schedule(self, *, is_session: bool = False) -> object:
+        """GET /v2/schedule/all — получает плоский массив всего расписания университета."""
+        return self._cached_get(f"/schedule/all?is_session={str(is_session).lower()}")
