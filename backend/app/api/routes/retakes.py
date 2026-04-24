@@ -5,6 +5,7 @@ from app.api.dependencies import (
     get_current_active_user,
     get_optional_current_user,
     require_admin,
+    require_schedule_retakes,
     require_scheduler_roles,
 )
 from app.db.session import get_db
@@ -52,7 +53,7 @@ def list_my_retakes(
 @router.get("/group/{group_uuid}", response_model=list[GroupRetakeRead])
 def list_group_retakes(
         group_uuid: str,
-        current_user: User = Depends(require_scheduler_roles),
+        current_user: User = Depends(require_schedule_retakes),
         db: Session = Depends(get_db),
 ) -> list[GroupRetakeRead]:
     return RetakeService(db).list_group_retakes(group_uuid=group_uuid, viewer=current_user)
@@ -61,7 +62,7 @@ def list_group_retakes(
 @router.get("/history/group/{group_name}", response_model=list[GroupHistoryEntryRead])
 def get_group_history(
         group_name: str,
-        _: User = Depends(require_scheduler_roles),
+        _: User = Depends(require_schedule_retakes),
         db: Session = Depends(get_db),
 ) -> list[GroupHistoryEntryRead]:
     return RetakeService(db).list_group_history(group_name=group_name)
@@ -70,7 +71,7 @@ def get_group_history(
 @router.post("/form-context", response_model=RetakeFormContextRead)
 def get_retake_form_context(
         payload: RetakeFormContextRequest,
-        current_user: User = Depends(require_scheduler_roles),
+        current_user: User = Depends(require_schedule_retakes),
         db: Session = Depends(get_db),
 ) -> RetakeFormContextRead:
     return RetakeService(db).get_form_context(payload=payload, user=current_user)
@@ -79,7 +80,7 @@ def get_retake_form_context(
 @router.post("/merged-day", response_model=dict[str, MergedDaySlotRead | None])
 def get_merged_day_schedule(
         payload: MergedDayScheduleRequest,
-        _: User = Depends(require_scheduler_roles),
+        _: User = Depends(require_schedule_retakes),
         db: Session = Depends(get_db),
 ) -> dict[str, MergedDaySlotRead | None]:
     return RetakeService(db).get_merged_day_schedule(payload)
@@ -89,7 +90,7 @@ def get_merged_day_schedule(
 def create_retake(
         payload: RetakeCreateRequest,
         request: Request,
-        current_user: User = Depends(require_scheduler_roles),
+        current_user: User = Depends(require_schedule_retakes),
         db: Session = Depends(get_db),
 ) -> RetakeRead:
     retake = RetakeService(db).create_retake(data=payload, user=current_user)

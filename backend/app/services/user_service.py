@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models import Department, TeacherLocal, User
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserCreate, UserSchedulePermissionsUpdate, UserUpdate
 
 
 class UserService:
@@ -27,6 +27,13 @@ class UserService:
         department_ids = self._normalize_department_ids(data.department_id, data.department_ids)
         self._validate_departments(data.department_id, department_ids)
         teacher_uuid = self._validate_teacher_uuid(data.teacher_uuid)
+        permissions = self._resolve_schedule_permissions(
+            role=data.role,
+            current_user=None,
+            can_schedule_semester=data.can_schedule_semester,
+            can_schedule_session=data.can_schedule_session,
+            can_schedule_retakes=data.can_schedule_retakes,
+        )
         existing_user = self.db.scalar(select(User).where(User.username == data.username))
         if existing_user is not None:
             raise HTTPException(
@@ -41,6 +48,9 @@ class UserService:
             role=data.role,
             is_active=data.is_active,
             must_change_password=True,
+            can_schedule_semester=permissions["can_schedule_semester"],
+            can_schedule_session=permissions["can_schedule_session"],
+            can_schedule_retakes=permissions["can_schedule_retakes"],
             department_id=data.department_id,
             department_ids=department_ids,
             teacher_uuid=teacher_uuid,
@@ -56,6 +66,13 @@ class UserService:
         department_ids = self._normalize_department_ids(data.department_id, data.department_ids)
         self._validate_departments(data.department_id, department_ids)
         teacher_uuid = self._validate_teacher_uuid(data.teacher_uuid)
+        permissions = self._resolve_schedule_permissions(
+            role=data.role,
+            current_user=user,
+            can_schedule_semester=data.can_schedule_semester,
+            can_schedule_session=data.can_schedule_session,
+            can_schedule_retakes=data.can_schedule_retakes,
+        )
         existing_user = self.db.scalar(
             select(User).where(
                 User.username == data.username,
@@ -72,6 +89,9 @@ class UserService:
         user.full_name = data.full_name
         user.role = data.role
         user.is_active = data.is_active
+        user.can_schedule_semester = permissions["can_schedule_semester"]
+        user.can_schedule_session = permissions["can_schedule_session"]
+        user.can_schedule_retakes = permissions["can_schedule_retakes"]
         user.department_id = data.department_id
         user.department_ids = department_ids
         user.teacher_uuid = teacher_uuid
@@ -80,6 +100,25 @@ class UserService:
         if data.password:
             user.password_hash = hash_password(data.password)
             user.must_change_password = True
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def update_schedule_permissions(self, user_id: int, data: UserSchedulePermissionsUpdate) -> User:
+        user = self.get_user(user_id)
+        if user.role != "EMPLOYEE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Schedule permissions can only be updated for EMPLOYEE users.",
+            )
+
+        if data.can_schedule_semester is not None:
+            user.can_schedule_semester = data.can_schedule_semester
+        if data.can_schedule_session is not None:
+            user.can_schedule_session = data.can_schedule_session
+        if data.can_schedule_retakes is not None:
+            user.can_schedule_retakes = data.can_schedule_retakes
+
         self.db.commit()
         self.db.refresh(user)
         return user
@@ -180,3 +219,37 @@ class UserService:
             )
             or 0
         )
+
+    def _resolve_schedule_permissions(
+        self,
+        *,
+        role: str,
+        current_user: User | None,
+        can_schedule_semester: bool | None,
+        can_schedule_session: bool | None,
+        can_schedule_retakes: bool | None,
+    ) -> dict[str, bool]:
+        if role != "EMPLOYEE":
+            return {
+                "can_schedule_semester": False,
+                "can_schedule_session": False,
+                "can_schedule_retakes": False,
+            }
+
+        return {
+            "can_schedule_semester": (
+                can_schedule_semester
+                if can_schedule_semester is not None
+                else bool(current_user.can_schedule_semester) if current_user else False
+            ),
+            "can_schedule_session": (
+                can_schedule_session
+                if can_schedule_session is not None
+                else bool(current_user.can_schedule_session) if current_user else False
+            ),
+            "can_schedule_retakes": (
+                can_schedule_retakes
+                if can_schedule_retakes is not None
+                else bool(current_user.can_schedule_retakes) if current_user else False
+            ),
+        }

@@ -10,11 +10,22 @@ from app.core.config import settings
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSRF_EXEMPT_PATHS = {
     f"{settings.api_prefix}/auth/login",
+    f"{settings.api_prefix}/v1/auth/token",
+    f"{settings.api_prefix}/v1/auth/refresh",
 }
 
 
 def should_validate_unsafe_api_request(request: Request) -> bool:
-    return request.method.upper() not in SAFE_METHODS and request.url.path.startswith(settings.api_prefix)
+    if request.method.upper() in SAFE_METHODS:
+        return False
+    if not request.url.path.startswith(settings.api_prefix):
+        return False
+    if request.url.path in CSRF_EXEMPT_PATHS:
+        return False
+    authorization = request.headers.get("authorization", "").strip().lower()
+    if authorization.startswith("bearer "):
+        return False
+    return True
 
 
 def enforce_trusted_request_origin(request: Request) -> None:

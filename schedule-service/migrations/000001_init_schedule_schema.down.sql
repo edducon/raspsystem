@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS schedule_slot_assignments;
+DROP TABLE IF EXISTS schedule_slots;
+DROP TABLE IF EXISTS subject_types;
+DROP TABLE IF EXISTS subjects;
+DROP TABLE IF EXISTS groups;
+DROP TABLE IF EXISTS directions;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS campuses;
+DROP TABLE IF EXISTS buildings;

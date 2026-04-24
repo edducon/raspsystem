@@ -72,7 +72,7 @@ app.add_middleware(
     allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
+    allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "Authorization"],
 )
 app.include_router(api_router, prefix=settings.api_prefix)
 

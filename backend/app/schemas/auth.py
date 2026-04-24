@@ -28,6 +28,9 @@ class AuthUserRead(BaseModel):
     full_name: Annotated[str, Field(serialization_alias="fullName")]
     role: str
     is_active: Annotated[bool, Field(serialization_alias="isActive")]
+    can_schedule_semester: Annotated[bool, Field(default=False, serialization_alias="canScheduleSemester")]
+    can_schedule_session: Annotated[bool, Field(default=False, serialization_alias="canScheduleSession")]
+    can_schedule_retakes: Annotated[bool, Field(default=False, serialization_alias="canScheduleRetakes")]
     department_id: Annotated[int | None, Field(default=None, serialization_alias="departmentId")]
     department_ids: Annotated[list[int], Field(default_factory=list, serialization_alias="departmentIds")]
     teacher_uuid: Annotated[str | None, Field(default=None, serialization_alias="teacherUuid")]
@@ -41,3 +44,18 @@ class AuthResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class ServiceTokenRequest(BaseModel):
+    user_id: int

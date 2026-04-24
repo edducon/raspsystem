@@ -1,0 +1,52 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: ${APP_NAME}
+        HTTP_PORT: ${HTTP_PORT}
+    container_name: ${APP_NAME}
+    networks:
+      - raspyx-network
+    ports:
+      - "${HTTP_PORT}:${HTTP_PORT}"
+    env_file:
+      - .env
+    logging:
+      driver: "local"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: ${APP_NAME}db
+    restart: always
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${APP_NAME}db
+    ports:
+      - "5432:5432"
+    networks:
+      - raspyx-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sh:/docker-entrypoint-initdb.d/init_db.sh
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+
+networks:
+  raspyx-network:
+    driver: bridge

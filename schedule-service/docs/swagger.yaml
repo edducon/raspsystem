@@ -1,0 +1,2008 @@
+basePath: /raspyx/api
+definitions:
+  models.AddGroupRequest:
+    properties:
+      number:
+        example: 221-352
+        type: string
+    type: object
+  models.AddLocationRequest:
+    properties:
+      name:
+        example: Автозаводская
+        type: string
+    type: object
+  models.AddRoomRequest:
+    properties:
+      number:
+        example: ав4810
+        type: string
+    type: object
+  models.AddRoomSchedule:
+    properties:
+      room_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.AddScheduleRequest:
+    properties:
+      end_date:
+        example: "2025-12-31"
+        type: string
+      end_time:
+        example: "10:30:00"
+        type: string
+      group_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      is_session:
+        example: false
+        type: boolean
+      link:
+        example: https://rasp.dmami.ru/
+        type: string
+      location_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      rooms_uuid:
+        items:
+          $ref: '#/definitions/models.AddRoomSchedule'
+        type: array
+      start_date:
+        example: "2025-09-01"
+        type: string
+      start_time:
+        example: "09:00:00"
+        type: string
+      subject_type_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      subject_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      teachers_uuid:
+        items:
+          $ref: '#/definitions/models.AddTeacherSchedule'
+        type: array
+      weekday:
+        example: 1
+        type: integer
+    type: object
+  models.AddSubjectRequest:
+    properties:
+      name:
+        example: Иностранный язык
+        type: string
+    type: object
+  models.AddSubjectTypeRequest:
+    properties:
+      type:
+        example: Лекция
+        type: string
+    type: object
+  models.AddTeacherRequest:
+    properties:
+      first_name:
+        example: Имя
+        type: string
+      middle_name:
+        example: Отчество
+        type: string
+      second_name:
+        example: Фамилия
+        type: string
+    type: object
+  models.AddTeacherSchedule:
+    properties:
+      teacher_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.Day:
+    properties:
+      "1":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "2":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "3":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "4":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "5":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "6":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+      "7":
+        items:
+          $ref: '#/definitions/models.Pair'
+        type: array
+    type: object
+  models.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
+  models.GetTeacherResponse:
+    properties:
+      full_name:
+        example: ФИО
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.Group:
+    properties:
+      number:
+        example: 221-352
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.GroupResponse:
+    properties:
+      group_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.Location:
+    properties:
+      name:
+        example: Автозаводская
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.LocationResponse:
+    properties:
+      location_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.Pair:
+    properties:
+      end_date:
+        example: "2025-06-01"
+        type: string
+      group:
+        $ref: '#/definitions/models.Group'
+      link:
+        example: https://online.mospolytech.ru/
+        type: string
+      location:
+        $ref: '#/definitions/models.Location'
+      rooms:
+        items:
+          $ref: '#/definitions/models.Room'
+        type: array
+      start_date:
+        example: "2025-02-01"
+        type: string
+      subject:
+        $ref: '#/definitions/models.Subject'
+      subject_type:
+        $ref: '#/definitions/models.SubjectType'
+      teachers:
+        items:
+          $ref: '#/definitions/models.GetTeacherResponse'
+        type: array
+    type: object
+  models.ResponseAPI:
+    properties:
+      errors:
+        $ref: '#/definitions/models.ErrorResponse'
+      message:
+        type: string
+      requestId:
+        type: string
+      result: {}
+      success:
+        type: boolean
+    type: object
+  models.Room:
+    properties:
+      number:
+        example: ав4810
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.RoomResponse:
+    properties:
+      room_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.ScheduleResponse:
+    properties:
+      schedule_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.Subject:
+    properties:
+      name:
+        example: Иностранный язык
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.SubjectResponse:
+    properties:
+      subject_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.SubjectType:
+    properties:
+      type:
+        example: Лекция
+        type: string
+      uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.SubjectTypeResponse:
+    properties:
+      subject_type_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.TeacherResponse:
+    properties:
+      teacher_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+    type: object
+  models.UpdateGroupRequest:
+    properties:
+      number:
+        example: 221-352
+        type: string
+    type: object
+  models.UpdateLocationRequest:
+    properties:
+      name:
+        example: Автозаводская
+        type: string
+    type: object
+  models.UpdateRoomRequest:
+    properties:
+      number:
+        example: ав4810
+        type: string
+    type: object
+  models.UpdateScheduleRequest:
+    properties:
+      end_date:
+        example: "2025-12-31"
+        type: string
+      end_time:
+        example: "10:30:00"
+        type: string
+      group_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      is_session:
+        example: false
+        type: boolean
+      link:
+        example: https://rasp.dmami.ru/
+        type: string
+      location_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      rooms_uuid:
+        items:
+          $ref: '#/definitions/models.AddRoomSchedule'
+        type: array
+      start_date:
+        example: "2025-09-01"
+        type: string
+      start_time:
+        example: "09:00:00"
+        type: string
+      subject_type_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      subject_uuid:
+        example: 4b6c34bd-01f0-4fbe-be65-217984b3e33d
+        type: string
+      teachers_uuid:
+        items:
+          $ref: '#/definitions/models.AddTeacherSchedule'
+        type: array
+      weekday:
+        example: 1
+        type: integer
+    type: object
+  models.UpdateSubjectRequest:
+    properties:
+      name:
+        example: Иностранный язык
+        type: string
+    type: object
+  models.UpdateSubjectTypeRequest:
+    properties:
+      type:
+        example: Лекция
+        type: string
+    type: object
+  models.UpdateTeacherRequest:
+    properties:
+      first_name:
+        example: Имя
+        type: string
+      middle_name:
+        example: Отчество
+        type: string
+      second_name:
+        example: Фамилия
+        type: string
+    type: object
+  models.Week:
+    properties:
+      friday:
+        $ref: '#/definitions/models.Day'
+      monday:
+        $ref: '#/definitions/models.Day'
+      saturday:
+        $ref: '#/definitions/models.Day'
+      thursday:
+        $ref: '#/definitions/models.Day'
+      tuesday:
+        $ref: '#/definitions/models.Day'
+      wednesday:
+        $ref: '#/definitions/models.Day'
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for schedules
+  title: Raspyx
+  version: 2.0.0
+paths:
+  /v2/groups:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех учебных групп в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об учебных группах успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Group'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение учебных групп
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      description: Создание новой учебной группы
+      parameters:
+      - description: Данные новой учебной группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Учебная группа успешно создана
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.GroupResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании учебной группы
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление учебной группы
+      tags:
+      - groups
+  /v2/groups/{group_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление учебной группы из системы по её идентификатору
+      parameters:
+      - description: Идентификатор учебной группы
+        in: path
+        name: group_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Учебная группа успешно удалена
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.GroupResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Учебная группа не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении учебной группы
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление учебной группы
+      tags:
+      - groups
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации об учебной группе по её идентификатору
+      parameters:
+      - description: Идентификатор учебной группы
+        in: path
+        name: group_uuid
+        required: true
+        type: string
+      - description: Данные для обновления учебной группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об учебной группе успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.GroupResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Учебная группа не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении учебной группы
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление учебной группы
+      tags:
+      - groups
+  /v2/groups/number/{group_number}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации об учебной группе по её group_number
+      parameters:
+      - description: Номер учебной группы
+        in: path
+        name: group_number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об учебной группе успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Group'
+                  type: array
+              type: object
+        "404":
+          description: Учебная группа не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение учебной группы по номеру
+      tags:
+      - groups
+  /v2/groups/uuid/{group_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации об учебной группе по её group_uuid
+      parameters:
+      - description: Идентификатор учебной группы
+        in: path
+        name: group_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об учебной группе успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Group'
+              type: object
+        "404":
+          description: Учебная группа не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение учебной группы по идентификатору
+      tags:
+      - groups
+  /v2/locations:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех локаций в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о локациях успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Location'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение локаций
+      tags:
+      - locations
+    post:
+      consumes:
+      - application/json
+      description: Создание новой локации
+      parameters:
+      - description: Данные новой локации
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddLocationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Локация успешно создана
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.LocationResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании локации
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление локации
+      tags:
+      - locations
+  /v2/locations/{location_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление локации из системы по её идентификатору
+      parameters:
+      - description: Идентификатор локации
+        in: path
+        name: location_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Локация успешно удалена
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.LocationResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Локация не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении локации
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление локации
+      tags:
+      - locations
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации о локации по её идентификатору
+      parameters:
+      - description: Идентификатор локации
+        in: path
+        name: location_uuid
+        required: true
+        type: string
+      - description: Данные для обновления локации
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateLocationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о локации успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.LocationResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Локация не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении локации
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление локации
+      tags:
+      - locations
+  /v2/locations/number/{location_name}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о локации по её location_name
+      parameters:
+      - description: Название локации
+        in: path
+        name: location_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о локации успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Location'
+                  type: array
+              type: object
+        "404":
+          description: Локация не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение локации по её названию
+      tags:
+      - locations
+  /v2/locations/uuid/{location_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о локации по её location_uuid
+      parameters:
+      - description: Идентификатор локации
+        in: path
+        name: location_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о локации успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Location'
+              type: object
+        "404":
+          description: Локация не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение локации по идентификатору
+      tags:
+      - locations
+  /v2/rooms:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех аудиторий в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об аудиториях успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Room'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение аудиторий
+      tags:
+      - rooms
+    post:
+      consumes:
+      - application/json
+      description: Создание новой аудитории
+      parameters:
+      - description: Данные новой аудитории
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Аудитория успешно создана
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.RoomResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании аудитории
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление аудитории
+      tags:
+      - rooms
+  /v2/rooms/{room_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление аудитории из системы по её идентификатору
+      parameters:
+      - description: Идентификатор аудитории
+        in: path
+        name: room_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Аудитория успешно удалена
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.RoomResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Аудитория не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении Аудитории
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление аудитории
+      tags:
+      - rooms
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации об аудитории по её идентификатору
+      parameters:
+      - description: Идентификатор аудитории
+        in: path
+        name: room_uuid
+        required: true
+        type: string
+      - description: Данные для обновления аудитории
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об аудитории успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.RoomResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Аудитория не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении аудитории
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление аудитории
+      tags:
+      - rooms
+  /v2/rooms/number/{room_number}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации об аудитории по её room_number
+      parameters:
+      - description: Номер аудитории
+        in: path
+        name: room_number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об аудитории успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Room'
+                  type: array
+              type: object
+        "404":
+          description: Аудитория не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение аудитории по её номеру
+      tags:
+      - rooms
+  /v2/rooms/uuid/{room_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации об аудитории по её room_uuid
+      parameters:
+      - description: Идентификатор аудитории
+        in: path
+        name: room_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные об аудитории успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Room'
+              type: object
+        "404":
+          description: Аудитория не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение аудитории по идентификатору
+      tags:
+      - rooms
+  /v2/schedule:
+    post:
+      consumes:
+      - application/json
+      description: Создание нового расписания
+      parameters:
+      - description: Данные нового расписания
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Расписание успешно создано
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.ScheduleResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании расписания
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление расписания
+      tags:
+      - schedule
+  /v2/schedule/{schedule_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление расписания из системы по его идентификатору
+      parameters:
+      - description: Идентификатор расписания
+        in: path
+        name: schedule_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Расписание успешно удалено
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.ScheduleResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Расписание не найдено
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении расписания
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление расписания
+      tags:
+      - schedule
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации о расписании по его идентификатору
+      parameters:
+      - description: Идентификатор расписания
+        in: path
+        name: schedule_uuid
+        required: true
+        type: string
+      - description: Данные для обновления расписания
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о расписании успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.ScheduleResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Расписание не найдено
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении расписания
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление расписания
+      tags:
+      - schedule
+  /v2/schedule/group_number/{group_number}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о расписании по его group_number
+      parameters:
+      - description: Номер учебной группы
+        in: path
+        name: group_number
+        required: true
+        type: string
+      - description: Флаг сессии
+        in: query
+        name: is_session
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о расписании успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Week'
+              type: object
+        "404":
+          description: Расписание не найдено
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      summary: Получение расписания по номеру группы
+      tags:
+      - schedule
+  /v2/schedule/teacher_fio/{teacher_fio}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о расписании по его teacher_fio
+      parameters:
+      - description: ФИО преподавателя
+        in: path
+        name: teacher_fio
+        required: true
+        type: string
+      - description: Флаг сессии
+        in: query
+        name: is_session
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о расписании успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Week'
+              type: object
+        "404":
+          description: Расписание не найдено
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      summary: Получение расписания по ФИО преподавателя
+      tags:
+      - schedule
+  /v2/subject_types:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех типов дисциплины в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о типах дисциплины успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.SubjectType'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение типов дисциплины
+      tags:
+      - subject_types
+    post:
+      consumes:
+      - application/json
+      description: Создание нового типа дисциплины
+      parameters:
+      - description: Данные нового типа дисциплины
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddSubjectTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Тип дисциплины успешно создан
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectTypeResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании типа дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление типа дисциплины
+      tags:
+      - subject_types
+  /v2/subject_types/{subject_type_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление типа дисциплины из системы по его идентификатору
+      parameters:
+      - description: Идентификатор типа дисциплины
+        in: path
+        name: subject_type_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Тип дисциплины успешно удален
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectTypeResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Тип дисциплины не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении типа дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление типа дисциплины
+      tags:
+      - subject_types
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации о типе дисциплины по его идентификатору
+      parameters:
+      - description: Идентификатор типа дисциплины
+        in: path
+        name: subject_type_uuid
+        required: true
+        type: string
+      - description: Данные для обновления типа дисциплины
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateSubjectTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о типе дисциплины успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectTypeResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Тип дисциплины не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении типа дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление типа дисциплины
+      tags:
+      - subject_types
+  /v2/subject_types/type/{subject_type}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о типе дисциплины по его subject_type
+      parameters:
+      - description: Название типа дисциплины
+        in: path
+        name: subject_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о типе дисциплины успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.SubjectType'
+                  type: array
+              type: object
+        "404":
+          description: Тип дисциплины не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение типа дисциплины по его типу
+      tags:
+      - subject_types
+  /v2/subject_types/uuid/{subject_type_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о типе дисциплины по его subject_type_uuid
+      parameters:
+      - description: Идентификатор типа дисциплины
+        in: path
+        name: subject_type_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о типе дисциплины успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectType'
+              type: object
+        "404":
+          description: Тип дисциплины не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение типа дисциплины по идентификатору
+      tags:
+      - subject_types
+  /v2/subjects:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех дисциплин в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о дисциплинах успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Subject'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение дисциплин
+      tags:
+      - subjects
+    post:
+      consumes:
+      - application/json
+      description: Создание новой дисциплины
+      parameters:
+      - description: Данные новой дисциплины
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddSubjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Дисциплина успешно создана
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление дисциплины
+      tags:
+      - subjects
+  /v2/subjects/{subject_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление дисциплины из системы по её идентификатору
+      parameters:
+      - description: Идентификатор дисциплины
+        in: path
+        name: subject_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Дисциплина успешно удалена
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Дисциплина не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление дисциплины
+      tags:
+      - subjects
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации о дисциплине по её идентификатору
+      parameters:
+      - description: Идентификатор дисциплины
+        in: path
+        name: subject_uuid
+        required: true
+        type: string
+      - description: Данные для обновления дисциплины
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateSubjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о дисциплине успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.SubjectResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Дисциплина не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении дисциплины
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление дисциплины
+      tags:
+      - subjects
+  /v2/subjects/name/{subject_name}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о дисциплине по её subject_name
+      parameters:
+      - description: Название дисциплины
+        in: path
+        name: subject_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о дисциплине успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.Subject'
+                  type: array
+              type: object
+        "404":
+          description: Дисциплина не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение дисциплины по её названию
+      tags:
+      - subjects
+  /v2/subjects/uuid/{subject_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о дисциплине по её subject_uuid
+      parameters:
+      - description: Идентификатор дисциплины
+        in: path
+        name: subject_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о дисциплине успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.Subject'
+              type: object
+        "404":
+          description: Дисциплина не найдена
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение дисциплины по идентификатору
+      tags:
+      - subjects
+  /v2/teachers:
+    get:
+      consumes:
+      - application/json
+      description: Получение списка всех преподавателей в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о преподавателях успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.GetTeacherResponse'
+                  type: array
+              type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение преподавателей
+      tags:
+      - teachers
+    post:
+      consumes:
+      - application/json
+      description: Создание нового преподавателя
+      parameters:
+      - description: Данные нового преподавателя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddTeacherRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Преподаватель создана
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.TeacherResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при создании преподавателя
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Добавление преподавателя
+      tags:
+      - teachers
+  /v2/teachers/{teacher_uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаление преподавателя из системы по его идентификатору
+      parameters:
+      - description: Идентификатор преподавателя
+        in: path
+        name: teacher_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Преподаватель успешно удалена
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.TeacherResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Преподаватель не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при удалении преподавателя
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Удаление преподавателя
+      tags:
+      - teachers
+    put:
+      consumes:
+      - application/json
+      description: Обновление информации о преподавателе по его идентификатору
+      parameters:
+      - description: Идентификатор преподавателя
+        in: path
+        name: teacher_uuid
+        required: true
+        type: string
+      - description: Данные для обновления преподавателя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateTeacherRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о преподавателе успешно обновлены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.TeacherResponse'
+              type: object
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "404":
+          description: Преподаватель не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "409":
+          description: Конфликт при обновлении преподавателя
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновление преподавателя
+      tags:
+      - teachers
+  /v2/teachers/fio/{teacher_fio}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о преподавателе по его teacher_fio
+      parameters:
+      - description: ФИО преподавателя
+        in: path
+        name: teacher_fio
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о преподавателе успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  items:
+                    $ref: '#/definitions/models.GetTeacherResponse'
+                  type: array
+              type: object
+        "404":
+          description: Преподаватель не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение преподавателя по его ФИО
+      tags:
+      - teachers
+  /v2/teachers/uuid/{teacher_uuid}:
+    get:
+      consumes:
+      - application/json
+      description: Получение информации о преподавателе по её teacher_uuid
+      parameters:
+      - description: Идентификатор преподавателя
+        in: path
+        name: teacher_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные о преподавателе успешно получены
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.ResponseAPI'
+            - properties:
+                result:
+                  $ref: '#/definitions/models.GetTeacherResponse'
+              type: object
+        "404":
+          description: Преподаватель не найден
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ResponseAPI'
+      security:
+      - ApiKeyAuth: []
+      summary: Получение преподавателя по идентификатору
+      tags:
+      - teachers
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

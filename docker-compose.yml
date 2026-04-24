@@ -39,6 +39,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    networks:
+      - default
+      - internal
 
   postgres:
     image: postgres:16-alpine
@@ -64,7 +67,46 @@ services:
     volumes:
       - redis_data:/data
 
+  postgres-schedule:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${SCHEDULE_DB_NAME:-schedule_db}
+      POSTGRES_USER: ${SCHEDULE_DB_USER:-schedule_user}
+      POSTGRES_PASSWORD: ${SCHEDULE_DB_PASSWORD:-schedule_password}
+    volumes:
+      - postgres_schedule_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SCHEDULE_DB_USER:-schedule_user} -d ${SCHEDULE_DB_NAME:-schedule_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  schedule-service:
+    build:
+      context: ./schedule-service
+    depends_on:
+      postgres-schedule:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      DB_HOST: ${SCHEDULE_DB_HOST:-postgres-schedule}
+      DB_PORT: ${SCHEDULE_DB_PORT:-5432}
+      DB_USER: ${SCHEDULE_DB_USER:-schedule_user}
+      DB_PASSWORD: ${SCHEDULE_DB_PASSWORD:-schedule_password}
+      DB_NAME: ${SCHEDULE_DB_NAME:-schedule_db}
+    networks:
+      - internal
+    restart: unless-stopped
+
 volumes:
   frontend_node_modules:
   postgres_data:
   redis_data:
+  postgres_schedule_data:
+
+networks:
+  internal:
+    internal: true

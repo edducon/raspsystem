@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     login_rate_limit_window_seconds: int = Field(default=15 * 60, alias="LOGIN_RATE_LIMIT_WINDOW_SECONDS")
     password_change_rate_limit_attempts: int = Field(default=5, alias="PASSWORD_CHANGE_RATE_LIMIT_ATTEMPTS")
     password_change_rate_limit_window_seconds: int = Field(default=10 * 60, alias="PASSWORD_CHANGE_RATE_LIMIT_WINDOW_SECONDS")
+    jwt_secret_key: str = Field(default="change-me", alias="JWT_SECRET_KEY")
+    jwt_access_token_expire_minutes: int = Field(default=60, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    jwt_refresh_token_expire_days: int = Field(default=30, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     postgres_server: str = Field(default="postgres", alias="POSTGRES_SERVER")
@@ -113,8 +116,15 @@ class Settings(BaseSettings):
             "change-me",
             "change-me-in-production",
         }
+        weak_jwt_secret_values = {
+            "",
+            "change-me",
+            "change-me-in-production",
+        }
         if self.session_secret_key.strip() in weak_session_secret_values:
             raise RuntimeError("SESSION_SECRET_KEY must be set to a strong value in production.")
+        if self.jwt_secret_key.strip() in weak_jwt_secret_values:
+            raise RuntimeError("JWT_SECRET_KEY must be set to a strong value in production.")
 
         if self.session_same_site.strip().lower() not in {"lax", "strict", "none"}:
             raise RuntimeError("SESSION_SAME_SITE must be one of: lax, strict, none.")

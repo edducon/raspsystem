@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import require_admin
 from app.models import User
 from app.db.session import get_db
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import UserCreate, UserRead, UserSchedulePermissionsUpdate, UserUpdate
 from app.services.audit_service import AuditService
 from app.services.user_service import UserService
 
@@ -90,3 +90,29 @@ def delete_user(
         details={"username": user.username},
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/{user_id}/schedule-permissions", response_model=UserRead)
+def update_user_schedule_permissions(
+    user_id: int,
+    data: UserSchedulePermissionsUpdate,
+    request: Request,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    service = UserService(db)
+    updated_user = service.update_schedule_permissions(user_id, data)
+    AuditService(db).record(
+        action="admin.user.update_schedule_permissions",
+        actor=current_admin,
+        request=request,
+        target_type="user",
+        target_id=str(updated_user.id),
+        details={
+            "username": updated_user.username,
+            "can_schedule_semester": updated_user.can_schedule_semester,
+            "can_schedule_session": updated_user.can_schedule_session,
+            "can_schedule_retakes": updated_user.can_schedule_retakes,
+        },
+    )
+    return updated_user
