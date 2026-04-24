@@ -12,9 +12,10 @@ import {
 } from '../lib/groupFormat';
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
-type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; createdBy: string | null; canDelete: boolean };
+type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; link: string | null; meetingId: string | null; createdBy: string | null; canDelete: boolean };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
+type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number };
 type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
   groupHistory: GroupHistoryEntry[];
@@ -26,6 +27,8 @@ type RetakeFormContext = {
   availableMainTeacherUuids: string[];
   availableCommissionTeacherUuids: string[];
   availableChairmanUuids: string[];
+  availableMeetings: RetakeMeeting[];
+  departmentId: number | null;
   mainTeacherLacksDept: boolean;
 };
 
@@ -41,6 +44,8 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
       attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
       date: retake?.date ?? '',
+      link: retake?.link ?? null,
+      meetingId: retake?.meetingId ?? retake?.meeting_id ?? null,
       createdBy: retake?.createdBy ?? retake?.created_by ?? null,
       canDelete: retake?.canDelete ?? retake?.can_delete ?? false,
     })),
@@ -54,6 +59,15 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
     availableMainTeacherUuids: raw?.availableMainTeacherUuids ?? raw?.available_main_teacher_uuids ?? [],
     availableCommissionTeacherUuids: raw?.availableCommissionTeacherUuids ?? raw?.available_commission_teacher_uuids ?? [],
     availableChairmanUuids: raw?.availableChairmanUuids ?? raw?.available_chairman_uuids ?? [],
+    availableMeetings: (raw?.availableMeetings ?? raw?.available_meetings ?? []).map((meeting: any) => ({
+      id: meeting?.id ?? '',
+      departmentId: meeting?.departmentId ?? meeting?.department_id ?? null,
+      date: meeting?.date ?? '',
+      link: meeting?.link ?? null,
+      title: meeting?.title ?? null,
+      retakeCount: meeting?.retakeCount ?? meeting?.retake_count ?? 0,
+    })),
+    departmentId: raw?.departmentId ?? raw?.department_id ?? null,
     mainTeacherLacksDept: raw?.mainTeacherLacksDept ?? raw?.main_teacher_lacks_dept ?? false,
   };
 }
@@ -77,6 +91,10 @@ const isSubmitting = ref(false);
 const retakeFormat = ref<'offline' | 'online'>('offline');
 const roomUuid = ref('');
 const onlineLink = ref('');
+const selectedMeetingId = ref('');
+const availableMeetings = ref<RetakeMeeting[]>([]);
+const editingMeetingId = ref<string | null>(null);
+const editingMeetingLink = ref('');
 const attemptNumber = ref(1);
 
 const groupSearchQuery = ref('');
@@ -95,6 +113,8 @@ const createEmptyFormContext = (): RetakeFormContext => ({
   availableMainTeacherUuids: [],
   availableCommissionTeacherUuids: [],
   availableChairmanUuids: [],
+  availableMeetings: [],
+  departmentId: null,
   mainTeacherLacksDept: false,
 });
 
@@ -225,6 +245,7 @@ const availableMainTeachers = computed(() => teachersByUuids(formContext.value.a
 const availableChairmen = computed(() => teachersByUuids(formContext.value.availableChairmanUuids));
 const availableCommissionTeachers = computed(() => teachersByUuids(formContext.value.availableCommissionTeacherUuids));
 const mainTeacherLacksDept = computed(() => formContext.value.mainTeacherLacksDept);
+const meetingOptions = computed(() => availableMeetings.value.length > 0 ? availableMeetings.value : formContext.value.availableMeetings);
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
@@ -252,6 +273,28 @@ const removeCommTeacher = (uuid: string) => {
 const selectChairman = (uuid: string) => {
   chairmanTeacher.value = uuid;
   showChairmanDropdown.value = false;
+};
+
+const loadMeetingCandidates = async () => {
+  if (retakeFormat.value !== 'online' || !selectedDate.value) {
+    availableMeetings.value = [];
+    selectedMeetingId.value = '';
+    return;
+  }
+
+  const params = new URLSearchParams({ date: selectedDate.value });
+  if (formContext.value.departmentId !== null) {
+    params.set('department_id', String(formContext.value.departmentId));
+  }
+
+  try {
+    availableMeetings.value = await fetchBackendFromBrowser<RetakeMeeting[]>(
+      props.backendApiUrl,
+      `/retakes/meetings?${params.toString()}`,
+    );
+  } catch {
+    availableMeetings.value = [];
+  }
 };
 
 const TIME_MAPPING: Record<number, string> = {
@@ -282,6 +325,8 @@ const resetSubjectContext = () => {
     availableMainTeacherUuids: [],
     availableCommissionTeacherUuids: [],
     availableChairmanUuids: [],
+    availableMeetings: [],
+    departmentId: null,
     mainTeacherLacksDept: false,
   };
 };
@@ -306,6 +351,8 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableMainTeacherUuids: nextContext.availableMainTeacherUuids,
       availableCommissionTeacherUuids: [],
       availableChairmanUuids: [],
+      availableMeetings: [],
+      departmentId: null,
       mainTeacherLacksDept: false,
     };
     return;
@@ -316,6 +363,8 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       ...formContext.value,
       availableCommissionTeacherUuids: nextContext.availableCommissionTeacherUuids,
       availableChairmanUuids: nextContext.availableChairmanUuids,
+      availableMeetings: nextContext.availableMeetings,
+      departmentId: nextContext.departmentId,
       mainTeacherLacksDept: nextContext.mainTeacherLacksDept,
     };
     return;
@@ -571,7 +620,7 @@ watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () =
   if (selectedDate.value && selectedGroupUuid.value) {
     isLoadingSlots.value = true;
     const group = props.groups.find((item) => item.uuid === selectedGroupUuid.value);
-    const allSelectedTeacherUuids = [...mainTeachers.value, ...commissionTeachers.value];
+    const allSelectedTeacherUuids = [...commissionTeachers.value];
     if (chairmanTeacher.value) allSelectedTeacherUuids.push(chairmanTeacher.value);
 
     if (group) {
@@ -598,6 +647,12 @@ watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () =
   }
 });
 
+watch([selectedDate, retakeFormat, () => formContext.value.departmentId], loadMeetingCandidates);
+
+watch(selectedMeetingId, (value) => {
+  if (value) onlineLink.value = '';
+});
+
 const toggleSlot = (slot: number) => {
   if (daySchedule.value && daySchedule.value[slot.toString()] !== null) return;
   const index = selectedSlots.value.indexOf(slot);
@@ -611,7 +666,6 @@ const submitRetake = async () => {
   if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('Выберите пары и ведущих преподавателей.', 'error');
   if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('Для второй и третьей попытки нужно выбрать председателя комиссии.', 'error');
   if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для очного формата.', 'error');
-  if (retakeFormat.value === 'online' && !onlineLink.value) return addToast('Укажите ссылку для онлайн-формата.', 'error');
   if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
 
   isSubmitting.value = true;
@@ -632,7 +686,9 @@ const submitRetake = async () => {
           date: selectedDate.value,
           timeSlots: selectedSlots.value,
           roomUuid: retakeFormat.value === 'offline' ? roomUuid.value : undefined,
-          link: retakeFormat.value === 'online' ? onlineLink.value : undefined,
+          link: retakeFormat.value === 'online' && !selectedMeetingId.value ? onlineLink.value || undefined : undefined,
+          meetingId: retakeFormat.value === 'online' && selectedMeetingId.value ? selectedMeetingId.value : undefined,
+          isOnline: retakeFormat.value === 'online',
           attemptNumber: attemptNumber.value,
           mainTeacherUuids: mainTeachers.value,
           commissionTeacherUuids: commissionTeachers.value,
@@ -647,6 +703,7 @@ const submitRetake = async () => {
     addToast('Пересдача успешно назначена.', 'success');
     roomUuid.value = '';
     onlineLink.value = '';
+    selectedMeetingId.value = '';
     chairmanTeacher.value = null;
     commissionTeachers.value = [];
   } catch (error) {
@@ -665,6 +722,33 @@ const deleteRetake = async (id: string) => {
     selectedDate.value = '';
   } catch (error) {
     addToast(error instanceof Error ? error.message : 'Не удалось удалить пересдачу.', 'error');
+  }
+};
+
+const startEditMeetingLink = (retake: GroupRetake) => {
+  if (!retake.meetingId) return;
+  editingMeetingId.value = retake.meetingId;
+  editingMeetingLink.value = retake.link ?? '';
+};
+
+const saveMeetingLink = async () => {
+  if (!editingMeetingId.value) return;
+  try {
+    await fetchBackendFromBrowser(
+      props.backendApiUrl,
+      `/retakes/meetings/${editingMeetingId.value}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ link: editingMeetingLink.value || null }),
+      },
+    );
+    addToast('Ссылка обновлена для всех пересдач этой встречи.', 'success');
+    editingMeetingId.value = null;
+    editingMeetingLink.value = '';
+    await loadFormContext('full');
+    await loadMeetingCandidates();
+  } catch (error) {
+    addToast(error instanceof Error ? error.message : 'Не удалось обновить ссылку.', 'error');
   }
 };
 </script>
@@ -881,17 +965,46 @@ const deleteRetake = async (id: string) => {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                 <span>Попытка {{ r.attemptNumber }} — <span class="font-bold">{{ formatDate(r.date) }}</span></span>
+                <span v-if="r.link" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">ссылка указана</span>
+                <span v-else-if="r.meetingId" class="text-xs font-semibold text-amber-700 dark:text-amber-300">ссылка не указана</span>
               </div>
 
-              <button
-                  v-if="r.canDelete"
-                  @click="deleteRetake(r.id)"
-                  class="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  title="Удалить"
-              >
-                <Trash2 class="w-4 h-4" />
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                    v-if="r.meetingId"
+                    @click="startEditMeetingLink(r)"
+                    class="text-[var(--accent-strong)] hover:underline text-xs font-bold"
+                >
+                  Ссылка
+                </button>
+                <button
+                    v-if="r.canDelete"
+                    @click="deleteRetake(r.id)"
+                    class="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    title="Удалить"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
+          </div>
+
+          <div
+              v-if="editingMeetingId"
+              class="mt-3 flex flex-col gap-2 rounded-2xl border border-amber-200/70 bg-white/70 p-3 dark:border-amber-500/10 dark:bg-black/20 sm:flex-row"
+          >
+            <input
+                v-model="editingMeetingLink"
+                type="url"
+                placeholder="Ссылка на подключение"
+                class="min-w-0 flex-1 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
+            />
+            <button
+                @click="saveMeetingLink"
+                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-slate-900"
+            >
+              Сохранить
+            </button>
           </div>
         </div>
       </div>
@@ -1057,10 +1170,26 @@ const deleteRetake = async (id: string) => {
             <input
                 v-else
                 v-model="onlineLink"
+                :disabled="!!selectedMeetingId"
                 type="url"
-                placeholder="Ссылка на подключение"
+                placeholder="Ссылка на подключение (можно добавить позже)"
                 class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
             />
+
+            <div v-if="retakeFormat === 'online' && meetingOptions.length > 0" class="mt-3">
+              <label class="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Общая ссылка
+              </label>
+              <select
+                  v-model="selectedMeetingId"
+                  class="h-12 w-full rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
+              >
+                <option value="">Создать отдельную встречу</option>
+                <option v-for="meeting in meetingOptions" :key="meeting.id" :value="meeting.id">
+                  {{ meeting.link || 'Ссылка будет добавлена позже' }} · {{ meeting.retakeCount }} пересд.
+                </option>
+              </select>
+            </div>
           </div>
 
           <!-- Attempt -->

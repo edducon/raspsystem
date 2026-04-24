@@ -12,6 +12,17 @@ class RetakeTeacherRead(BaseModel):
     role: str
 
 
+class RetakeMeetingRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    id: str
+    department_id: int | None = None
+    date: str
+    link: str | None = None
+    title: str | None = None
+    retake_count: int = 0
+
+
 class RetakeRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -23,11 +34,14 @@ class RetakeRead(BaseModel):
     time_slots: list[int]
     room_uuid: str | None = None
     link: str | None = None
+    meeting_id: str | None = None
+    department_id: int | None = None
     attempt_number: int
     created_by: str | None = None
     created_at: datetime | None = None
     can_delete: bool = False
     teachers: list[RetakeTeacherRead] = Field(default_factory=list)
+    meeting: RetakeMeetingRead | None = None
 
 
 class GroupRetakeRead(BaseModel):
@@ -38,6 +52,8 @@ class GroupRetakeRead(BaseModel):
     subject_name: str | None = None
     attempt_number: int
     date: str
+    link: str | None = None
+    meeting_id: str | None = None
     created_by: str | None = None
     can_delete: bool = False
 
@@ -97,6 +113,8 @@ class RetakeFormContextRead(BaseModel):
     available_main_teacher_uuids: list[str] = Field(default_factory=list)
     available_commission_teacher_uuids: list[str] = Field(default_factory=list)
     available_chairman_uuids: list[str] = Field(default_factory=list)
+    available_meetings: list[RetakeMeetingRead] = Field(default_factory=list)
+    department_id: int | None = None
     main_teacher_lacks_dept: bool = False
 
 
@@ -141,6 +159,9 @@ class RetakeCreateRequest(BaseModel):
     time_slots: list[int]
     room_uuid: str | None = None
     link: str | None = None
+    meeting_id: str | None = None
+    department_id: int | None = None
+    is_online: bool = False
     attempt_number: int = 1
     main_teacher_uuids: list[str]
     commission_teacher_uuids: list[str] = Field(default_factory=list)
@@ -170,3 +191,10 @@ class RetakeCreateRequest(BaseModel):
         if not unique_teachers:
             raise ValueError("Нужно выбрать хотя бы одного ведущего преподавателя.")
         return unique_teachers
+
+
+class RetakeMeetingUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    link: str | None = None
+    title: str | None = None

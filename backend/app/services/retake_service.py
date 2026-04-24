@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import PastSemester, Retake, RetakeTeacher, TeacherLocal, User
+from app.models import PastSemester, Retake, RetakeLeadTeacher, RetakeMeeting, RetakeTeacher, TeacherLocal, User
 from app.schemas.retake import MergedDayScheduleRequest, RetakeCreateRequest, RetakeFormContextRequest
 from app.services.raspyx_service import RaspyxService
 from app.services.reference_schedule_service import ReferenceScheduleService
@@ -41,6 +41,8 @@ class RetakeService:
                 "subject_name": self._resolve_subject_name_safe(retake.subject_uuid),
                 "attempt_number": retake.attempt_number,
                 "date": retake.date,
+                "link": self._effective_link(retake),
+                "meeting_id": retake.meeting_id,
                 "created_by": retake.created_by,
                 "can_delete": self._can_delete(retake, viewer),
             }
@@ -106,6 +108,8 @@ class RetakeService:
         main_teacher_lacks_dept = False
         available_commission_teacher_uuids: list[str] = []
         available_chairman_uuids: list[str] = []
+        available_meetings: list[dict] = []
+        department_id: int | None = None
         if include_teacher_data and payload.main_teacher_uuids:
             commission_context = self._build_commission_context(
                 main_teacher_uuids=payload.main_teacher_uuids,
@@ -115,6 +119,13 @@ class RetakeService:
             main_teacher_lacks_dept = commission_context["main_teacher_lacks_dept"]
             available_commission_teacher_uuids = commission_context["available_commission_teacher_uuids"]
             available_chairman_uuids = commission_context["available_chairman_uuids"]
+            department_id = commission_context["department_id"]
+            if payload.subject_uuid:
+                available_meetings = self._list_meeting_candidates(
+                    date=None,
+                    department_id=department_id,
+                    teacher_uuids=payload.commission_teacher_uuids + ([payload.chairman_uuid] if payload.chairman_uuid else []),
+                )
 
         return {
             "group_history": group_history,
@@ -126,6 +137,8 @@ class RetakeService:
             "available_main_teacher_uuids": available_main_teacher_uuids,
             "available_commission_teacher_uuids": available_commission_teacher_uuids,
             "available_chairman_uuids": available_chairman_uuids,
+            "available_meetings": available_meetings,
+            "department_id": department_id,
             "main_teacher_lacks_dept": main_teacher_lacks_dept,
         }
 
@@ -136,6 +149,7 @@ class RetakeService:
             select(Retake, RetakeTeacher.role)
             .join(RetakeTeacher, Retake.id == RetakeTeacher.retake_id)
             .where(RetakeTeacher.teacher_uuid == user.teacher_uuid)
+            .where(RetakeTeacher.role != "MAIN")
             .order_by(Retake.date.asc(), Retake.attempt_number.asc(), Retake.created_at.asc())
         ).all()
         return [
@@ -147,7 +161,7 @@ class RetakeService:
                 "date": retake.date,
                 "time_slots": list(retake.time_slots or []),
                 "room": retake.room_uuid,
-                "link": retake.link,
+                "link": self._effective_link(retake),
                 "attempt_number": retake.attempt_number,
                 "my_role": role,
             }
@@ -159,9 +173,11 @@ class RetakeService:
         teacher_map = self._load_teacher_map(
             data.main_teacher_uuids + data.commission_teacher_uuids + ([data.chairman_uuid] if data.chairman_uuid else [])
         )
+        department_id = self._resolve_retake_department_id(data=data, user=user, teacher_map=teacher_map)
         self._ensure_subject_access(user=user, data=data)
-        self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map)
+        self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
         self._ensure_attempt_is_available(data)
+        meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
 
         retake = Retake(
             group_uuid=data.group_uuid,
@@ -169,7 +185,9 @@ class RetakeService:
             date=data.date,
             time_slots=list(data.time_slots),
             room_uuid=data.room_uuid,
-            link=data.link,
+            link=data.link if meeting is None else None,
+            meeting_id=meeting.id if meeting is not None else None,
+            department_id=department_id,
             attempt_number=data.attempt_number,
             created_by=str(user.id),
         )
@@ -177,7 +195,7 @@ class RetakeService:
         self.db.flush()
 
         for teacher_uuid in data.main_teacher_uuids:
-            self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="MAIN"))
+            self.db.add(RetakeLeadTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid))
         for teacher_uuid in data.commission_teacher_uuids:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
         if data.chairman_uuid:
@@ -205,6 +223,33 @@ class RetakeService:
         self.db.delete(retake)
         self.db.commit()
 
+    def list_meeting_candidates(self, date: str, user: User, department_id: int | None = None) -> list[dict]:
+        if len(date) != 10:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дата должна быть в формате ГГГГ-ММ-ДД.")
+        if user.role != "ADMIN":
+            user_departments = set(user.department_ids or [])
+            if department_id is not None and department_id not in user_departments:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к встречам другой кафедры.")
+        return self._list_meeting_candidates(date=date, department_id=department_id, teacher_uuids=[])
+
+    def update_meeting(self, meeting_id: str, link: str | None, title: str | None, user: User) -> dict:
+        meeting = self.db.scalar(
+            select(RetakeMeeting)
+            .options(selectinload(RetakeMeeting.retakes))
+            .where(RetakeMeeting.id == meeting_id)
+        )
+        if meeting is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Встреча не найдена.")
+        if user.role != "ADMIN":
+            user_departments = set(user.department_ids or [])
+            if meeting.department_id is not None and meeting.department_id not in user_departments:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к встрече другой кафедры.")
+        meeting.link = link.strip() if link else None
+        meeting.title = title.strip() if title else None
+        self.db.commit()
+        self.db.refresh(meeting)
+        return self._serialize_meeting(meeting)
+
     def get_merged_day_schedule(self, data: MergedDayScheduleRequest) -> dict[str, dict | None]:
         schedule = {str(slot): None for slot in range(1, 8)}
         date_value = datetime.strptime(data.date, "%Y-%m-%d")
@@ -224,7 +269,7 @@ class RetakeService:
                     "details": {
                         "subject": "Пересдача уже назначена в системе",
                         "type": f"Попытка {retake.attempt_number}",
-                        "location": "Онлайн" if retake.link else (retake.room_uuid or "Очно"),
+                        "location": "Онлайн" if self._effective_link(retake) else (retake.room_uuid or "Очно"),
                     },
                 }
 
@@ -233,6 +278,7 @@ class RetakeService:
                 select(RetakeTeacher.retake_id, RetakeTeacher.teacher_uuid, TeacherLocal.full_name)
                 .join(TeacherLocal, RetakeTeacher.teacher_uuid == TeacherLocal.uuid)
                 .where(RetakeTeacher.retake_id.in_([retake.id for retake in db_retakes]))
+                .where(RetakeTeacher.role != "MAIN")
             ).all()
 
             retake_by_id = {retake.id: retake for retake in db_retakes}
@@ -305,16 +351,32 @@ class RetakeService:
         return (
             select(Retake)
             .options(selectinload(Retake.teacher_links).selectinload(RetakeTeacher.teacher))
+            .options(selectinload(Retake.lead_teacher_links).selectinload(RetakeLeadTeacher.teacher))
+            .options(selectinload(Retake.meeting).selectinload(RetakeMeeting.retakes))
             .order_by(Retake.date.asc(), Retake.attempt_number.asc(), Retake.created_at.asc())
         )
 
     def _serialize_retake(self, retake: Retake, viewer: User | None = None) -> dict:
         teachers = []
+        seen_lead_uuids: set[str] = set()
+        for lead_link in sorted(retake.lead_teacher_links, key=lambda item: item.teacher_uuid):
+            if lead_link.teacher is None:
+                continue
+            seen_lead_uuids.add(lead_link.teacher_uuid)
+            teachers.append(
+                {
+                    "teacher_uuid": lead_link.teacher_uuid,
+                    "full_name": lead_link.teacher.full_name,
+                    "role": "MAIN",
+                }
+            )
         for teacher_link in sorted(
             retake.teacher_links,
             key=lambda item: (self._teacher_role_weight(item.role), item.teacher_uuid),
         ):
             if teacher_link.teacher is None:
+                continue
+            if teacher_link.role == "MAIN" and teacher_link.teacher_uuid in seen_lead_uuids:
                 continue
             teachers.append(
                 {
@@ -331,13 +393,61 @@ class RetakeService:
             "date": retake.date,
             "time_slots": list(retake.time_slots or []),
             "room_uuid": retake.room_uuid,
-            "link": retake.link,
+            "link": self._effective_link(retake),
+            "meeting_id": retake.meeting_id,
+            "department_id": retake.department_id,
             "attempt_number": retake.attempt_number,
             "created_by": retake.created_by,
             "created_at": retake.created_at,
             "can_delete": self._can_delete(retake, viewer),
             "teachers": teachers,
+            "meeting": self._serialize_meeting(retake.meeting) if retake.meeting else None,
         }
+
+    def _effective_link(self, retake: Retake) -> str | None:
+        if retake.meeting is not None:
+            return retake.meeting.link
+        return retake.link
+
+    def _serialize_meeting(self, meeting: RetakeMeeting) -> dict:
+        return {
+            "id": meeting.id,
+            "department_id": meeting.department_id,
+            "date": meeting.date,
+            "link": meeting.link,
+            "title": meeting.title,
+            "retake_count": len(meeting.retakes or []),
+        }
+
+    def _list_meeting_candidates(
+        self,
+        date: str | None,
+        department_id: int | None,
+        teacher_uuids: list[str],
+    ) -> list[dict]:
+        query = select(RetakeMeeting).options(selectinload(RetakeMeeting.retakes))
+        if date:
+            query = query.where(RetakeMeeting.date == date)
+        if department_id is not None:
+            query = query.where((RetakeMeeting.department_id == department_id) | (RetakeMeeting.department_id.is_(None)))
+
+        meetings = list(self.db.scalars(query.order_by(RetakeMeeting.created_at.desc())).all())
+        if not teacher_uuids:
+            return [self._serialize_meeting(meeting) for meeting in meetings[:20]]
+
+        requested = set(teacher_uuids)
+        ranked: list[tuple[int, RetakeMeeting]] = []
+        for meeting in meetings:
+            participant_uuids = {
+                link.teacher_uuid
+                for retake in meeting.retakes
+                for link in (retake.teacher_links or [])
+                if link.role != "MAIN"
+            }
+            score = len(requested.intersection(participant_uuids))
+            ranked.append((score, meeting))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [self._serialize_meeting(meeting) for _, meeting in ranked[:20]]
 
     def _can_delete(self, retake: Retake, viewer: User | None) -> bool:
         if viewer is None:
@@ -352,14 +462,18 @@ class RetakeService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Номер попытки должен быть от 1 до 3.")
         if data.attempt_number > 1 and not data.chairman_uuid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для 2-й и 3-й попытки нужен председатель комиссии.")
-        if bool(data.room_uuid) == bool(data.link):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите аудиторию или ссылку, но не оба поля сразу.")
+        if not data.room_uuid and not data.is_online and not data.link and not data.meeting_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите очную аудиторию или онлайн-формат.")
+        if data.room_uuid and (data.link or data.meeting_id or data.is_online):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для очной пересдачи нельзя одновременно указывать онлайн-ссылку.")
+        if data.link and data.meeting_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите новую ссылку или выберите существующую встречу, но не оба варианта сразу.")
 
-        duplicates = set(data.main_teacher_uuids) & set(data.commission_teacher_uuids)
-        if data.chairman_uuid and (data.chairman_uuid in data.main_teacher_uuids or data.chairman_uuid in data.commission_teacher_uuids):
+        duplicates = set()
+        if data.chairman_uuid and data.chairman_uuid in data.commission_teacher_uuids:
             duplicates.add(data.chairman_uuid)
         if duplicates:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Один преподаватель не может иметь несколько ролей.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Один преподаватель не может быть одновременно председателем и членом комиссии.")
 
     def _load_teacher_map(self, teacher_uuids: list[str]) -> dict[str, TeacherLocal]:
         unique_uuids = list(dict.fromkeys([uuid for uuid in teacher_uuids if uuid]))
@@ -371,6 +485,68 @@ class RetakeService:
         if missing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некоторые преподаватели отсутствуют в справочнике.")
         return teacher_map
+
+    def _resolve_retake_department_id(
+        self,
+        data: RetakeCreateRequest,
+        user: User,
+        teacher_map: dict[str, TeacherLocal],
+    ) -> int | None:
+        if data.department_id is not None:
+            if user.role != "ADMIN":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Вручную выбрать кафедру может только администратор.")
+            return data.department_id
+
+        main_teachers = [teacher_map[uuid] for uuid in data.main_teacher_uuids if uuid in teacher_map]
+        if not main_teachers:
+            return None
+
+        common_departments = set(main_teachers[0].department_ids or [])
+        for teacher in main_teachers[1:]:
+            common_departments.intersection_update(set(teacher.department_ids or []))
+        if not common_departments:
+            return None
+
+        if user.role != "ADMIN":
+            user_departments = set(user.department_ids or [])
+            allowed = sorted(common_departments.intersection(user_departments))
+            if allowed:
+                return allowed[0]
+
+        return sorted(common_departments)[0]
+
+    def _resolve_or_create_meeting(
+        self,
+        data: RetakeCreateRequest,
+        user: User,
+        department_id: int | None,
+    ) -> RetakeMeeting | None:
+        if data.room_uuid and not data.is_online:
+            return None
+
+        if data.meeting_id:
+            meeting = self.db.scalar(select(RetakeMeeting).where(RetakeMeeting.id == data.meeting_id))
+            if meeting is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Выбранная встреча не найдена.")
+            if meeting.date != data.date:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Встреча должна быть на ту же дату.")
+            if department_id and meeting.department_id and meeting.department_id != department_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Встреча относится к другой кафедре.")
+            return meeting
+
+        if data.is_online or data.link:
+            meeting = RetakeMeeting(
+                department_id=department_id,
+                date=data.date,
+                link=data.link or None,
+                title=None,
+                created_by=str(user.id),
+            )
+            self.db.add(meeting)
+            self.db.flush()
+            return meeting
+
+        return None
 
     def _ensure_attempt_is_available(self, data: RetakeCreateRequest) -> None:
         selected_subject_name = self._resolve_subject_name(data.subject_uuid)
@@ -389,37 +565,35 @@ class RetakeService:
         if error_message is not None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_message)
 
-    def _ensure_teacher_access(self, user: User, data: RetakeCreateRequest, teacher_map: dict[str, TeacherLocal]) -> None:
-        main_teachers = [teacher_map[uuid] for uuid in data.main_teacher_uuids]
-        if not main_teachers:
-            return
-
-        main_departments = set(main_teachers[0].department_ids or [])
-        for teacher in main_teachers[1:]:
-            main_departments.intersection_update(set(teacher.department_ids or []))
-
+    def _ensure_teacher_access(
+        self,
+        user: User,
+        data: RetakeCreateRequest,
+        teacher_map: dict[str, TeacherLocal],
+        department_id: int | None,
+    ) -> None:
         if user.role != "ADMIN":
             user_departments = set(user.department_ids or [])
-            if not main_departments or not user_departments.intersection(main_departments):
+            if not department_id or department_id not in user_departments:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Ведущие преподаватели не относятся к вашей кафедре.",
+                    detail="Кафедра пересдачи не относится к вашим кафедрам.",
                 )
 
-        if main_departments:
-            commission_uuids = list(data.commission_teacher_uuids)
+        if department_id:
+            participant_uuids = list(data.commission_teacher_uuids)
             if data.chairman_uuid:
-                commission_uuids.append(data.chairman_uuid)
+                participant_uuids.append(data.chairman_uuid)
 
             invalid_commission = [
                 uuid
-                for uuid in commission_uuids
-                if not main_departments.intersection(set(teacher_map[uuid].department_ids or []))
+                for uuid in participant_uuids
+                if department_id not in set(teacher_map[uuid].department_ids or [])
             ]
             if invalid_commission:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Комиссия должна быть с той же кафедры, что и ведущие преподаватели.",
+                    detail="Комиссия должна быть с кафедры пересдачи.",
                 )
 
     def _resolve_subject_name(self, subject_uuid: str) -> str:
@@ -746,6 +920,7 @@ class RetakeService:
                 "main_teacher_lacks_dept": False,
                 "available_commission_teacher_uuids": [],
                 "available_chairman_uuids": [],
+                "department_id": None,
             }
 
         main_departments = set(teachers_list[0].department_ids or [])
@@ -753,17 +928,18 @@ class RetakeService:
             main_departments.intersection_update(set(teacher.department_ids or []))
 
         main_teacher_lacks_dept = bool(main_teacher_uuids) and not main_departments
+        department_id = min(main_departments) if main_departments else None
         if not main_departments:
             return {
                 "main_teacher_lacks_dept": main_teacher_lacks_dept,
                 "available_commission_teacher_uuids": [],
                 "available_chairman_uuids": [],
+                "department_id": None,
             }
 
         pool = list(self.db.scalars(select(TeacherLocal).order_by(TeacherLocal.full_name.asc())).all())
         allowed_pool = [teacher for teacher in pool if main_departments.intersection(set(teacher.department_ids or []))]
 
-        selected_main_uuids = set(main_teacher_uuids)
         selected_commission_uuids = set(commission_teacher_uuids)
 
         return {
@@ -771,13 +947,14 @@ class RetakeService:
             "available_commission_teacher_uuids": [
                 teacher.uuid
                 for teacher in allowed_pool
-                if teacher.uuid not in selected_main_uuids and teacher.uuid != chairman_uuid
+                if teacher.uuid != chairman_uuid
             ],
             "available_chairman_uuids": [
                 teacher.uuid
                 for teacher in allowed_pool
-                if teacher.uuid not in selected_main_uuids and teacher.uuid not in selected_commission_uuids
+                if teacher.uuid not in selected_commission_uuids
             ],
+            "department_id": department_id,
         }
 
     def _get_subject_access_error(self, user: User, group_number: str, subject_uuid: str | None) -> str | None:

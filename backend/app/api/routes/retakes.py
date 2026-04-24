@@ -23,6 +23,8 @@ from app.schemas.retake import (
     MergedDayScheduleRequest,
     MergedDaySlotRead,
     RetakeCreateRequest,
+    RetakeMeetingRead,
+    RetakeMeetingUpdateRequest,
     RetakeRead,
     TeacherRetakeRead,
 )
@@ -102,6 +104,36 @@ def create_retake(
         details={"group_uuid": retake["group_uuid"], "subject_uuid": retake["subject_uuid"], "attempt_number": retake["attempt_number"]},
     )
     return retake
+
+
+@router.get("/meetings", response_model=list[RetakeMeetingRead])
+def list_meeting_candidates(
+        date: str,
+        department_id: int | None = None,
+        current_user: User = Depends(require_scheduler_roles),
+        db: Session = Depends(get_db),
+) -> list[RetakeMeetingRead]:
+    return RetakeService(db).list_meeting_candidates(date=date, department_id=department_id, user=current_user)
+
+
+@router.patch("/meetings/{meeting_id}", response_model=RetakeMeetingRead)
+def update_retake_meeting(
+        meeting_id: str,
+        payload: RetakeMeetingUpdateRequest,
+        request: Request,
+        current_user: User = Depends(require_scheduler_roles),
+        db: Session = Depends(get_db),
+) -> RetakeMeetingRead:
+    meeting = RetakeService(db).update_meeting(meeting_id=meeting_id, link=payload.link, title=payload.title, user=current_user)
+    AuditService(db).record(
+        action="retake.meeting.update",
+        actor=current_user,
+        request=request,
+        target_type="retake_meeting",
+        target_id=meeting_id,
+        details={"link": bool(meeting.get("link")), "title": meeting.get("title")},
+    )
+    return meeting
 
 
 @router.post("/admin/past-semester/import", response_model=PastSemesterImportResponse)
