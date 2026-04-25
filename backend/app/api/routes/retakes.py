@@ -22,10 +22,13 @@ from app.schemas.retake import (
     RetakeFormContextRequest,
     MergedDayScheduleRequest,
     MergedDaySlotRead,
+    RetakeAttemptRuleRead,
+    RetakeAttemptRuleUpdate,
     RetakeCreateRequest,
     RetakeMeetingRead,
     RetakeMeetingUpdateRequest,
     RetakeRead,
+    RetakeUpdateRequest,
     TeacherRetakeRead,
 )
 from app.services.audit_service import AuditService
@@ -106,6 +109,26 @@ def create_retake(
     return retake
 
 
+@router.patch("/{retake_id}", response_model=RetakeRead)
+def update_retake(
+        retake_id: str,
+        payload: RetakeUpdateRequest,
+        request: Request,
+        current_user: User = Depends(require_scheduler_roles),
+        db: Session = Depends(get_db),
+) -> RetakeRead:
+    retake = RetakeService(db).update_retake(retake_id=retake_id, data=payload, user=current_user)
+    AuditService(db).record(
+        action="retake.update",
+        actor=current_user,
+        request=request,
+        target_type="retake",
+        target_id=retake_id,
+        details={"group_uuid": retake["group_uuid"], "subject_uuid": retake["subject_uuid"], "attempt_number": retake["attempt_number"]},
+    )
+    return retake
+
+
 @router.get("/meetings", response_model=list[RetakeMeetingRead])
 def list_meeting_candidates(
         date: str,
@@ -134,6 +157,38 @@ def update_retake_meeting(
         details={"link": bool(meeting.get("link")), "title": meeting.get("title")},
     )
     return meeting
+
+
+@router.get("/attempt-rules", response_model=list[RetakeAttemptRuleRead])
+def list_attempt_rules(
+        _: User = Depends(require_scheduler_roles),
+        db: Session = Depends(get_db),
+) -> list[RetakeAttemptRuleRead]:
+    return RetakeService(db).list_attempt_rules()
+
+
+@router.put("/admin/attempt-rules/{attempt_number}", response_model=RetakeAttemptRuleRead)
+def update_attempt_rule(
+        attempt_number: int,
+        payload: RetakeAttemptRuleUpdate,
+        request: Request,
+        current_admin: User = Depends(require_admin),
+        db: Session = Depends(get_db),
+) -> RetakeAttemptRuleRead:
+    rule = RetakeService(db).update_attempt_rule(
+        attempt_number=attempt_number,
+        requires_chairman=payload.requires_chairman,
+        min_commission_members=payload.min_commission_members,
+    )
+    AuditService(db).record(
+        action="admin.retakes.attempt_rule.update",
+        actor=current_admin,
+        request=request,
+        target_type="retake_attempt_rule",
+        target_id=str(attempt_number),
+        details=rule,
+    )
+    return rule
 
 
 @router.post("/admin/past-semester/import", response_model=PastSemesterImportResponse)
@@ -241,7 +296,7 @@ def reset_retakes(
 def delete_retake(
         retake_id: str,
         request: Request,
-        current_user: User = Depends(get_current_active_user),
+        current_user: User = Depends(require_scheduler_roles),
         db: Session = Depends(get_db),
 ) -> Response:
     RetakeService(db).delete_retake(retake_id=retake_id, user=current_user)

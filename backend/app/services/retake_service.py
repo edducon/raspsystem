@@ -5,11 +5,11 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, select
+from sqlalchemy import Select, delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import PastSemester, Retake, RetakeLeadTeacher, RetakeMeeting, RetakeTeacher, TeacherLocal, User
-from app.schemas.retake import MergedDayScheduleRequest, RetakeCreateRequest, RetakeFormContextRequest
+from app.models import PastSemester, Retake, RetakeAttemptRule, RetakeLeadTeacher, RetakeMeeting, RetakeTeacher, TeacherLocal, User
+from app.schemas.retake import MergedDayScheduleRequest, RetakeCreateRequest, RetakeFormContextRequest, RetakeUpdateRequest
 from app.services.raspyx_service import RaspyxService
 from app.services.reference_schedule_service import ReferenceScheduleService
 from app.services.subject_matching import clean_subject_name, fuzzy_match, normalize_for_compare
@@ -30,24 +30,11 @@ class RetakeService:
 
     def list_group_retakes(self, group_uuid: str, viewer: User) -> list[dict]:
         retakes = self.db.scalars(
-            select(Retake)
+            self._retake_query()
             .where(Retake.group_uuid == group_uuid)
             .order_by(Retake.attempt_number.asc(), Retake.date.asc(), Retake.created_at.asc())
         ).all()
-        return [
-            {
-                "id": retake.id,
-                "subject_uuid": retake.subject_uuid,
-                "subject_name": self._resolve_subject_name_safe(retake.subject_uuid),
-                "attempt_number": retake.attempt_number,
-                "date": retake.date,
-                "link": self._effective_link(retake),
-                "meeting_id": retake.meeting_id,
-                "created_by": retake.created_by,
-                "can_delete": self._can_delete(retake, viewer),
-            }
-            for retake in retakes
-        ]
+        return [self._serialize_retake(retake, viewer=viewer) for retake in retakes]
 
     def list_group_history(self, group_name: str) -> list[dict]:
         rows = self._load_group_history_rows(group_name)
@@ -138,6 +125,7 @@ class RetakeService:
             "available_commission_teacher_uuids": available_commission_teacher_uuids,
             "available_chairman_uuids": available_chairman_uuids,
             "available_meetings": available_meetings,
+            "attempt_rules": self.list_attempt_rules(),
             "department_id": department_id,
             "main_teacher_lacks_dept": main_teacher_lacks_dept,
         }
@@ -211,6 +199,53 @@ class RetakeService:
             )
         return self._serialize_retake(created, viewer=user)
 
+    def update_retake(self, retake_id: str, data: RetakeUpdateRequest, user: User) -> dict:
+        retake = self.db.scalar(self._retake_query().where(Retake.id == retake_id))
+        if retake is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пересдача не найдена.")
+        if not self._can_manage_department(retake.department_id, user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к пересдаче другой кафедры.")
+
+        self._validate_create_payload(data)
+        teacher_map = self._load_teacher_map(
+            data.main_teacher_uuids + data.commission_teacher_uuids + ([data.chairman_uuid] if data.chairman_uuid else [])
+        )
+        department_id = self._resolve_retake_department_id(data=data, user=user, teacher_map=teacher_map)
+        self._ensure_subject_access(user=user, data=data)
+        self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
+        self._ensure_attempt_is_available(data, exclude_retake_id=retake_id)
+        meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
+
+        retake.group_uuid = data.group_uuid
+        retake.subject_uuid = data.subject_uuid
+        retake.date = data.date
+        retake.time_slots = list(data.time_slots)
+        retake.room_uuid = data.room_uuid if not data.is_online else None
+        retake.link = data.link if meeting is None else None
+        retake.meeting_id = meeting.id if meeting is not None else None
+        retake.department_id = department_id
+        retake.attempt_number = data.attempt_number
+
+        self.db.execute(delete(RetakeLeadTeacher).where(RetakeLeadTeacher.retake_id == retake_id))
+        self.db.execute(delete(RetakeTeacher).where(RetakeTeacher.retake_id == retake_id))
+
+        for teacher_uuid in data.main_teacher_uuids:
+            self.db.add(RetakeLeadTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid))
+        for teacher_uuid in data.commission_teacher_uuids:
+            self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
+        if data.chairman_uuid:
+            self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=data.chairman_uuid, role="CHAIRMAN"))
+
+        self.db.commit()
+
+        updated = self.db.scalar(self._retake_query().where(Retake.id == retake.id))
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Пересдача обновлена, но не удалось загрузить её данные.",
+            )
+        return self._serialize_retake(updated, viewer=user)
+
     def delete_retake(self, retake_id: str, user: User) -> None:
         retake = self.db.scalar(self._retake_query().where(Retake.id == retake_id))
         if retake is None:
@@ -218,7 +253,7 @@ class RetakeService:
         if not self._can_delete(retake, user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Удалить пересдачу может только администратор или её автор.",
+                detail="Удалить пересдачу может только администратор или сотрудник той же кафедры.",
             )
         self.db.delete(retake)
         self.db.commit()
@@ -230,6 +265,20 @@ class RetakeService:
             user_departments = set(user.department_ids or [])
             if department_id is not None and department_id not in user_departments:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к встречам другой кафедры.")
+            if department_id is None and user_departments:
+                meetings: list[dict] = []
+                for user_department_id in sorted(user_departments):
+                    meetings.extend(self._list_meeting_candidates(date=date, department_id=user_department_id, teacher_uuids=[]))
+                seen: set[str] = set()
+                result: list[dict] = []
+                for meeting in meetings:
+                    if meeting["id"] in seen:
+                        continue
+                    seen.add(meeting["id"])
+                    result.append(meeting)
+                return result
+            if department_id is None:
+                return []
         return self._list_meeting_candidates(date=date, department_id=department_id, teacher_uuids=[])
 
     def update_meeting(self, meeting_id: str, link: str | None, title: str | None, user: User) -> dict:
@@ -240,15 +289,41 @@ class RetakeService:
         )
         if meeting is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Встреча не найдена.")
-        if user.role != "ADMIN":
-            user_departments = set(user.department_ids or [])
-            if meeting.department_id is not None and meeting.department_id not in user_departments:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к встрече другой кафедры.")
+        if not self._can_manage_department(meeting.department_id, user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к встрече другой кафедры.")
         meeting.link = link.strip() if link else None
         meeting.title = title.strip() if title else None
         self.db.commit()
         self.db.refresh(meeting)
         return self._serialize_meeting(meeting)
+
+    def list_attempt_rules(self) -> list[dict]:
+        self._ensure_attempt_rules()
+        rules = self.db.scalars(select(RetakeAttemptRule).order_by(RetakeAttemptRule.attempt_number.asc())).all()
+        return [self._serialize_attempt_rule(rule) for rule in rules]
+
+    def update_attempt_rule(
+        self,
+        attempt_number: int,
+        requires_chairman: bool,
+        min_commission_members: int,
+    ) -> dict:
+        if attempt_number not in {1, 2, 3}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Номер попытки должен быть от 1 до 3.")
+        if min_commission_members < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Минимум членов комиссии не может быть отрицательным.")
+
+        self._ensure_attempt_rules()
+        rule = self.db.get(RetakeAttemptRule, attempt_number)
+        if rule is None:
+            rule = RetakeAttemptRule(attempt_number=attempt_number)
+            self.db.add(rule)
+
+        rule.requires_chairman = requires_chairman
+        rule.min_commission_members = min_commission_members
+        self.db.commit()
+        self.db.refresh(rule)
+        return self._serialize_attempt_rule(rule)
 
     def get_merged_day_schedule(self, data: MergedDayScheduleRequest) -> dict[str, dict | None]:
         schedule = {str(slot): None for slot in range(1, 8)}
@@ -259,8 +334,13 @@ class RetakeService:
             return schedule
 
         db_retakes = self.db.scalars(select(Retake).where(Retake.date == data.date)).all()
+        checked_retakes = [
+            retake
+            for retake in db_retakes
+            if not data.exclude_retake_id or retake.id != data.exclude_retake_id
+        ]
 
-        for retake in db_retakes:
+        for retake in checked_retakes:
             if retake.group_uuid != data.group_uuid:
                 continue
             for slot in retake.time_slots:
@@ -273,15 +353,15 @@ class RetakeService:
                     },
                 }
 
-        if data.teacher_uuids and db_retakes:
+        if data.teacher_uuids and checked_retakes:
             busy_rows = self.db.execute(
                 select(RetakeTeacher.retake_id, RetakeTeacher.teacher_uuid, TeacherLocal.full_name)
                 .join(TeacherLocal, RetakeTeacher.teacher_uuid == TeacherLocal.uuid)
-                .where(RetakeTeacher.retake_id.in_([retake.id for retake in db_retakes]))
+                .where(RetakeTeacher.retake_id.in_([retake.id for retake in checked_retakes]))
                 .where(RetakeTeacher.role != "MAIN")
             ).all()
 
-            retake_by_id = {retake.id: retake for retake in db_retakes}
+            retake_by_id = {retake.id: retake for retake in checked_retakes}
             requested_teacher_uuids = set(data.teacher_uuids)
             for retake_id, teacher_uuid, full_name in busy_rows:
                 if teacher_uuid not in requested_teacher_uuids:
@@ -429,7 +509,7 @@ class RetakeService:
         if date:
             query = query.where(RetakeMeeting.date == date)
         if department_id is not None:
-            query = query.where((RetakeMeeting.department_id == department_id) | (RetakeMeeting.department_id.is_(None)))
+            query = query.where(RetakeMeeting.department_id == department_id)
 
         meetings = list(self.db.scalars(query.order_by(RetakeMeeting.created_at.desc())).all())
         if not teacher_uuids:
@@ -452,7 +532,46 @@ class RetakeService:
     def _can_delete(self, retake: Retake, viewer: User | None) -> bool:
         if viewer is None:
             return False
-        return viewer.role == "ADMIN" or retake.created_by == str(viewer.id)
+        return self._can_manage_department(retake.department_id, viewer)
+
+    def _can_manage_department(self, department_id: int | None, viewer: User | None) -> bool:
+        if viewer is None:
+            return False
+        if viewer.role == "ADMIN":
+            return True
+        if viewer.role != "EMPLOYEE" or department_id is None:
+            return False
+        return department_id in set(viewer.department_ids or [])
+
+    def _serialize_attempt_rule(self, rule: RetakeAttemptRule) -> dict:
+        return {
+            "attempt_number": rule.attempt_number,
+            "requires_chairman": rule.requires_chairman,
+            "min_commission_members": rule.min_commission_members,
+        }
+
+    def _default_attempt_rules(self) -> list[RetakeAttemptRule]:
+        return [
+            RetakeAttemptRule(attempt_number=1, requires_chairman=False, min_commission_members=1),
+            RetakeAttemptRule(attempt_number=2, requires_chairman=True, min_commission_members=0),
+            RetakeAttemptRule(attempt_number=3, requires_chairman=True, min_commission_members=0),
+        ]
+
+    def _ensure_attempt_rules(self) -> None:
+        existing_numbers = set(self.db.scalars(select(RetakeAttemptRule.attempt_number)).all())
+        missing_rules = [rule for rule in self._default_attempt_rules() if rule.attempt_number not in existing_numbers]
+        if not missing_rules:
+            return
+        self.db.add_all(missing_rules)
+        self.db.commit()
+
+    def _attempt_rule_for(self, attempt_number: int) -> RetakeAttemptRule:
+        self._ensure_attempt_rules()
+        rule = self.db.get(RetakeAttemptRule, attempt_number)
+        if rule is not None:
+            return rule
+        default_rules = {rule.attempt_number: rule for rule in self._default_attempt_rules()}
+        return default_rules.get(attempt_number, RetakeAttemptRule(attempt_number=attempt_number))
 
     def _teacher_role_weight(self, role: str) -> int:
         return {"MAIN": 1, "CHAIRMAN": 2, "COMMISSION": 3}.get(role, 99)
@@ -460,8 +579,14 @@ class RetakeService:
     def _validate_create_payload(self, data: RetakeCreateRequest) -> None:
         if data.attempt_number not in {1, 2, 3}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Номер попытки должен быть от 1 до 3.")
-        if data.attempt_number > 1 and not data.chairman_uuid:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для 2-й и 3-й попытки нужен председатель комиссии.")
+        rule = self._attempt_rule_for(data.attempt_number)
+        if rule.requires_chairman and not data.chairman_uuid:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для выбранной попытки нужно выбрать председателя комиссии.")
+        if len(data.commission_teacher_uuids) < rule.min_commission_members:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Для выбранной попытки нужно выбрать членов комиссии: минимум {rule.min_commission_members}.",
+            )
         if not data.room_uuid and not data.is_online and not data.link and not data.meeting_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите очную аудиторию или онлайн-формат.")
         if data.room_uuid and (data.link or data.meeting_id or data.is_online):
@@ -548,7 +673,7 @@ class RetakeService:
 
         return None
 
-    def _ensure_attempt_is_available(self, data: RetakeCreateRequest) -> None:
+    def _ensure_attempt_is_available(self, data: RetakeCreateRequest, exclude_retake_id: str | None = None) -> None:
         selected_subject_name = self._resolve_subject_name(data.subject_uuid)
         candidates = self.db.scalars(
             select(Retake).where(
@@ -557,6 +682,8 @@ class RetakeService:
             )
         ).all()
         for retake in candidates:
+            if exclude_retake_id is not None and retake.id == exclude_retake_id:
+                continue
             if normalize_for_compare(self._resolve_subject_name_safe(retake.subject_uuid)) == normalize_for_compare(selected_subject_name):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Эта попытка уже назначена.")
 

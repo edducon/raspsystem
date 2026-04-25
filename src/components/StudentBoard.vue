@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  Sparkles,
 } from 'lucide-vue-next';
 import { getDateLabel, daysUntil } from '../lib/dateUtils';
 import { useRecentGroups } from '../composables/useRecentGroups';

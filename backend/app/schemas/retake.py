@@ -23,6 +23,21 @@ class RetakeMeetingRead(BaseModel):
     retake_count: int = 0
 
 
+class RetakeAttemptRuleRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    attempt_number: int
+    requires_chairman: bool = False
+    min_commission_members: int = 0
+
+
+class RetakeAttemptRuleUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    requires_chairman: bool = False
+    min_commission_members: int = 0
+
+
 class RetakeRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -52,10 +67,14 @@ class GroupRetakeRead(BaseModel):
     subject_name: str | None = None
     attempt_number: int
     date: str
+    time_slots: list[int] = Field(default_factory=list)
+    room_uuid: str | None = None
     link: str | None = None
     meeting_id: str | None = None
+    department_id: int | None = None
     created_by: str | None = None
     can_delete: bool = False
+    teachers: list[RetakeTeacherRead] = Field(default_factory=list)
 
 
 class TeacherRetakeRead(BaseModel):
@@ -114,6 +133,7 @@ class RetakeFormContextRead(BaseModel):
     available_commission_teacher_uuids: list[str] = Field(default_factory=list)
     available_chairman_uuids: list[str] = Field(default_factory=list)
     available_meetings: list[RetakeMeetingRead] = Field(default_factory=list)
+    attempt_rules: list[RetakeAttemptRuleRead] = Field(default_factory=list)
     department_id: int | None = None
     main_teacher_lacks_dept: bool = False
 
@@ -140,6 +160,7 @@ class MergedDayScheduleRequest(BaseModel):
     group_uuid: str
     teacher_uuids: list[str] = Field(default_factory=list)
     date: str
+    exclude_retake_id: str | None = None
 
     @field_validator("date")
     @classmethod
@@ -191,6 +212,10 @@ class RetakeCreateRequest(BaseModel):
         if not unique_teachers:
             raise ValueError("Нужно выбрать хотя бы одного ведущего преподавателя.")
         return unique_teachers
+
+
+class RetakeUpdateRequest(RetakeCreateRequest):
+    pass
 
 
 class RetakeMeetingUpdateRequest(BaseModel):

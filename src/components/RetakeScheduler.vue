@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch, computed } from 'vue';
-import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2 } from 'lucide-vue-next';
+import { Calendar, Clock, Users, CheckCircle, Search, ChevronDown, MapPin, Globe, X, AlertTriangle, Info, Trash2, Pencil } from 'lucide-vue-next';
 import { addToast } from '../composables/useToast';
 import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
 import { cleanSubjectName } from '../lib/subjectNorm';
@@ -12,10 +12,12 @@ import {
 } from '../lib/groupFormat';
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
-type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; link: string | null; meetingId: string | null; createdBy: string | null; canDelete: boolean };
+type RetakeTeacher = { teacherUuid: string; fullName: string; role: string };
+type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
 type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number };
+type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
 type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
   groupHistory: GroupHistoryEntry[];
@@ -28,6 +30,7 @@ type RetakeFormContext = {
   availableCommissionTeacherUuids: string[];
   availableChairmanUuids: string[];
   availableMeetings: RetakeMeeting[];
+  attemptRules: RetakeAttemptRule[];
   departmentId: number | null;
   mainTeacherLacksDept: boolean;
 };
@@ -44,10 +47,18 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
       attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
       date: retake?.date ?? '',
+      timeSlots: retake?.timeSlots ?? retake?.time_slots ?? [],
+      roomUuid: retake?.roomUuid ?? retake?.room_uuid ?? null,
       link: retake?.link ?? null,
       meetingId: retake?.meetingId ?? retake?.meeting_id ?? null,
+      departmentId: retake?.departmentId ?? retake?.department_id ?? null,
       createdBy: retake?.createdBy ?? retake?.created_by ?? null,
       canDelete: retake?.canDelete ?? retake?.can_delete ?? false,
+      teachers: (retake?.teachers ?? []).map((teacher: any) => ({
+        teacherUuid: teacher?.teacherUuid ?? teacher?.teacher_uuid ?? '',
+        fullName: teacher?.fullName ?? teacher?.full_name ?? '',
+        role: teacher?.role ?? '',
+      })),
     })),
     availableSubjects: (raw?.availableSubjects ?? raw?.available_subjects ?? []).map((subject: any) => ({
       uuid: subject?.uuid ?? '',
@@ -66,6 +77,11 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       link: meeting?.link ?? null,
       title: meeting?.title ?? null,
       retakeCount: meeting?.retakeCount ?? meeting?.retake_count ?? 0,
+    })),
+    attemptRules: (raw?.attemptRules ?? raw?.attempt_rules ?? []).map((rule: any) => ({
+      attemptNumber: rule?.attemptNumber ?? rule?.attempt_number ?? 1,
+      requiresChairman: rule?.requiresChairman ?? rule?.requires_chairman ?? false,
+      minCommissionMembers: rule?.minCommissionMembers ?? rule?.min_commission_members ?? 0,
     })),
     departmentId: raw?.departmentId ?? raw?.department_id ?? null,
     mainTeacherLacksDept: raw?.mainTeacherLacksDept ?? raw?.main_teacher_lacks_dept ?? false,
@@ -95,6 +111,7 @@ const selectedMeetingId = ref('');
 const availableMeetings = ref<RetakeMeeting[]>([]);
 const editingMeetingId = ref<string | null>(null);
 const editingMeetingLink = ref('');
+const editingRetakeId = ref<string | null>(null);
 const attemptNumber = ref(1);
 
 const groupSearchQuery = ref('');
@@ -114,6 +131,11 @@ const createEmptyFormContext = (): RetakeFormContext => ({
   availableCommissionTeacherUuids: [],
   availableChairmanUuids: [],
   availableMeetings: [],
+  attemptRules: [
+    { attemptNumber: 1, requiresChairman: false, minCommissionMembers: 1 },
+    { attemptNumber: 2, requiresChairman: true, minCommissionMembers: 0 },
+    { attemptNumber: 3, requiresChairman: true, minCommissionMembers: 0 },
+  ],
   departmentId: null,
   mainTeacherLacksDept: false,
 });
@@ -154,12 +176,20 @@ const handleGroupInput = (event: Event) => {
 };
 
 const selectSubject = (subject: RetakeSubjectOption) => {
+  if (editingRetakeId.value && subject.uuid !== selectedSubject.value) {
+    addToast('Сначала отмените редактирование текущей пересдачи.', 'error');
+    return;
+  }
   selectedSubject.value = subject.uuid;
   showSubjectDropdown.value = false;
 };
 
 const groupHistory = computed(() => formContext.value.groupHistory);
 const existingGroupRetakes = computed(() => formContext.value.existingRetakes);
+const editingRetake = computed(() => existingGroupRetakes.value.find((retake) => retake.id === editingRetakeId.value) ?? null);
+const isAttemptUnavailable = (attempt: number) => (
+  assignedAttempts.value.includes(attempt) && editingRetake.value?.attemptNumber !== attempt
+);
 
 const sectionsCollapsed = ref({ slots: false, format: false, commission: false });
 
@@ -214,7 +244,7 @@ const currentSubjectRetakes = computed(() => {
 const assignedAttempts = computed(() => formContext.value.assignedAttempts);
 
 watch(assignedAttempts, (assigned) => {
-  if (!assigned.includes(attemptNumber.value)) return;
+  if (!assigned.includes(attemptNumber.value) || editingRetake.value?.attemptNumber === attemptNumber.value) return;
   attemptNumber.value = formContext.value.nextAttemptNumber;
 }, { immediate: true });
 
@@ -246,6 +276,10 @@ const availableChairmen = computed(() => teachersByUuids(formContext.value.avail
 const availableCommissionTeachers = computed(() => teachersByUuids(formContext.value.availableCommissionTeacherUuids));
 const mainTeacherLacksDept = computed(() => formContext.value.mainTeacherLacksDept);
 const meetingOptions = computed(() => availableMeetings.value.length > 0 ? availableMeetings.value : formContext.value.availableMeetings);
+const currentAttemptRule = computed(() => (
+  formContext.value.attemptRules.find((rule) => rule.attemptNumber === attemptNumber.value)
+  ?? { attemptNumber: attemptNumber.value, requiresChairman: attemptNumber.value > 1, minCommissionMembers: attemptNumber.value === 1 ? 1 : 0 }
+));
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
@@ -326,6 +360,7 @@ const resetSubjectContext = () => {
     availableCommissionTeacherUuids: [],
     availableChairmanUuids: [],
     availableMeetings: [],
+    attemptRules: formContext.value.attemptRules,
     departmentId: null,
     mainTeacherLacksDept: false,
   };
@@ -352,6 +387,7 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableCommissionTeacherUuids: [],
       availableChairmanUuids: [],
       availableMeetings: [],
+      attemptRules: nextContext.attemptRules,
       departmentId: null,
       mainTeacherLacksDept: false,
     };
@@ -364,6 +400,7 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableCommissionTeacherUuids: nextContext.availableCommissionTeacherUuids,
       availableChairmanUuids: nextContext.availableChairmanUuids,
       availableMeetings: nextContext.availableMeetings,
+      attemptRules: nextContext.attemptRules,
       departmentId: nextContext.departmentId,
       mainTeacherLacksDept: nextContext.mainTeacherLacksDept,
     };
@@ -513,17 +550,17 @@ const loadFormContext = async (scope: FormContextScope = 'full') => {
     mergeFormContext(scope, nextContext);
     hasLoadedFormContext.value = true;
 
-    if (scope === 'teachers' || scope === 'full') {
+    if ((scope === 'teachers' || scope === 'full') && !editingRetakeId.value) {
       normalizeSelectedTeacherState(formContext.value);
     }
 
-    if ((scope === 'subject' || scope === 'full') && selectedSubject.value) {
+    if ((scope === 'subject' || scope === 'full') && selectedSubject.value && !editingRetakeId.value) {
       applyAutoMainTeachers(formContext.value, scope === 'subject');
     }
 
     if (
       (scope === 'subject' || scope === 'full')
-      && (assignedAttempts.value.includes(attemptNumber.value) || attemptNumber.value < 1 || attemptNumber.value > 3)
+      && (isAttemptUnavailable(attemptNumber.value) || attemptNumber.value < 1 || attemptNumber.value > 3)
     ) {
       attemptNumber.value = formContext.value.nextAttemptNumber;
     }
@@ -569,6 +606,7 @@ watch(selectedGroupUuid, async (newUuid, oldUuid) => {
   selectedSlots.value = [];
   daySchedule.value = null;
   autoMainTeacherMessage.value = null;
+  editingRetakeId.value = null;
   resetFormContext();
   formContextError.value = null;
   hasLoadedFormContext.value = false;
@@ -613,7 +651,7 @@ watch(
   },
 );
 
-watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () => commissionTeachers.value.join(','), chairmanTeacher], async () => {
+watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () => commissionTeachers.value.join(','), chairmanTeacher, editingRetakeId], async () => {
   selectedSlots.value = [];
   daySchedule.value = null;
 
@@ -635,6 +673,7 @@ watch([selectedDate, selectedGroupUuid, () => mainTeachers.value.join(','), () =
               groupUuid: group.uuid,
               teacherUuids: allSelectedTeacherUuids,
               date: selectedDate.value,
+              excludeRetakeId: editingRetakeId.value || undefined,
             }),
           },
         );
@@ -654,19 +693,65 @@ watch(selectedMeetingId, (value) => {
 });
 
 const toggleSlot = (slot: number) => {
-  if (daySchedule.value && daySchedule.value[slot.toString()] !== null) return;
+  if (daySchedule.value && daySchedule.value[slot.toString()] !== null && !selectedSlots.value.includes(slot)) return;
   const index = selectedSlots.value.indexOf(slot);
   if (index === -1) selectedSlots.value.push(slot);
   else selectedSlots.value.splice(index, 1);
   selectedSlots.value.sort();
 };
 
+const resetRetakeDraft = () => {
+  selectedSlots.value = [];
+  selectedDate.value = '';
+  roomUuid.value = '';
+  onlineLink.value = '';
+  selectedMeetingId.value = '';
+  chairmanTeacher.value = null;
+  commissionTeachers.value = [];
+};
+
+const cancelRetakeEdit = () => {
+  editingRetakeId.value = null;
+  resetRetakeDraft();
+  attemptNumber.value = formContext.value.nextAttemptNumber;
+};
+
+const startEditRetake = async (retake: GroupRetake) => {
+  if (!retake.canDelete) return;
+
+  suppressFormContextReload = true;
+  editingRetakeId.value = retake.id;
+  selectedSubject.value = retake.subjectUuid;
+  selectedDate.value = retake.date;
+  selectedSlots.value = [...retake.timeSlots].sort();
+  attemptNumber.value = retake.attemptNumber;
+  mainTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'MAIN').map((teacher) => teacher.teacherUuid);
+  commissionTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'COMMISSION').map((teacher) => teacher.teacherUuid);
+  chairmanTeacher.value = retake.teachers.find((teacher) => teacher.role === 'CHAIRMAN')?.teacherUuid ?? null;
+  retakeFormat.value = retake.roomUuid ? 'offline' : 'online';
+  roomUuid.value = retake.roomUuid ?? '';
+  selectedMeetingId.value = retake.meetingId ?? '';
+  onlineLink.value = retake.meetingId ? '' : retake.link ?? '';
+  autoMainTeacherMessage.value = null;
+
+  try {
+    await loadFormContext('full');
+    await loadMeetingCandidates();
+  } finally {
+    suppressFormContextReload = false;
+    selectedSlots.value = [...retake.timeSlots].sort();
+  }
+};
+
 const submitRetake = async () => {
   if (subjectBelongsToAnotherDept.value) return addToast(formContext.value.subjectBlockedReason || 'Нет прав назначения.', 'error');
   if (selectedSlots.value.length === 0 || mainTeachers.value.length === 0) return addToast('Выберите пары и ведущих преподавателей.', 'error');
-  if (attemptNumber.value > 1 && !chairmanTeacher.value) return addToast('Для второй и третьей попытки нужно выбрать председателя комиссии.', 'error');
+  if (currentAttemptRule.value.requiresChairman && !chairmanTeacher.value) return addToast('Для выбранной попытки нужно выбрать председателя комиссии.', 'error');
+  if (commissionTeachers.value.length < currentAttemptRule.value.minCommissionMembers) {
+    return addToast(`Для выбранной попытки нужно выбрать членов комиссии: минимум ${currentAttemptRule.value.minCommissionMembers}.`, 'error');
+  }
   if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для очного формата.', 'error');
-  if (assignedAttempts.value.includes(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
+  if (isAttemptUnavailable(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
 
   isSubmitting.value = true;
 
@@ -674,11 +759,12 @@ const submitRetake = async () => {
     const group = props.groups.find((item) => item.uuid === selectedGroupUuid.value);
     if (!group) throw new Error('Группа не найдена.');
 
+    const isEditing = !!editingRetakeId.value;
     await fetchBackendFromBrowser(
       props.backendApiUrl,
-      '/retakes',
+      isEditing ? `/retakes/${editingRetakeId.value}` : '/retakes',
       {
-        method: 'POST',
+        method: isEditing ? 'PATCH' : 'POST',
         body: JSON.stringify({
           groupNumber: group.number,
           groupUuid: selectedGroupUuid.value,
@@ -697,17 +783,15 @@ const submitRetake = async () => {
       },
     );
 
+    const successMessage = isEditing
+      ? 'Пересдача успешно обновлена.'
+      : 'Пересдача успешно назначена.';
+    editingRetakeId.value = null;
     await loadFormContext('full');
-    selectedSlots.value = [];
-    selectedDate.value = '';
-    addToast('Пересдача успешно назначена.', 'success');
-    roomUuid.value = '';
-    onlineLink.value = '';
-    selectedMeetingId.value = '';
-    chairmanTeacher.value = null;
-    commissionTeachers.value = [];
+    resetRetakeDraft();
+    addToast(successMessage, 'success');
   } catch (error) {
-    addToast(error instanceof Error ? error.message : 'Не удалось создать пересдачу.', 'error');
+    addToast(error instanceof Error ? error.message : 'Не удалось сохранить пересдачу.', 'error');
   } finally {
     isSubmitting.value = false;
   }
@@ -718,6 +802,10 @@ const deleteRetake = async (id: string) => {
   try {
     await fetchBackendFromBrowser(props.backendApiUrl, `/retakes/${id}`, { method: 'DELETE' });
     addToast('Пересдача удалена.', 'success');
+    if (editingRetakeId.value === id) {
+      editingRetakeId.value = null;
+      resetRetakeDraft();
+    }
     await loadFormContext('full');
     selectedDate.value = '';
   } catch (error) {
@@ -971,6 +1059,14 @@ const saveMeetingLink = async () => {
 
               <div class="flex items-center gap-2">
                 <button
+                    v-if="r.canDelete"
+                    @click="startEditRetake(r)"
+                    class="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-2 rounded-xl hover:bg-white/70 dark:hover:bg-white/10 transition-colors"
+                    title="Редактировать"
+                >
+                  <Pencil class="w-4 h-4" />
+                </button>
+                <button
                     v-if="r.meetingId"
                     @click="startEditMeetingLink(r)"
                     class="text-[var(--accent-strong)] hover:underline text-xs font-bold"
@@ -1043,10 +1139,10 @@ const saveMeetingLink = async () => {
                 @click="toggleSlot(slot)"
                 :class="[
                 'p-4 rounded-[22px] border flex flex-col md:flex-row justify-between md:items-center gap-3 transition-all select-none',
-                daySchedule[slot.toString()]
-                  ? 'bg-slate-50 dark:bg-black/10 border-slate-200 dark:border-white/10 opacity-70 cursor-not-allowed'
-                  : selectedSlots.includes(slot)
+                selectedSlots.includes(slot)
                   ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 cursor-pointer'
+                  : daySchedule[slot.toString()]
+                  ? 'bg-slate-50 dark:bg-black/10 border-slate-200 dark:border-white/10 opacity-70 cursor-not-allowed'
                   : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/10 hover:border-[var(--panel-border-strong)] cursor-pointer'
               ]"
             >
@@ -1054,7 +1150,7 @@ const saveMeetingLink = async () => {
                 <div
                     :class="[
                     'w-11 h-11 rounded-2xl flex items-center justify-center font-black text-base shrink-0',
-                    selectedSlots.includes(slot) && !daySchedule[slot.toString()]
+                    selectedSlots.includes(slot)
                       ? 'bg-white/20 text-white'
                       : 'bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10'
                   ]"
@@ -1065,7 +1161,7 @@ const saveMeetingLink = async () => {
                 <div>
                   <div
                       class="font-semibold text-sm"
-                      :class="selectedSlots.includes(slot) && !daySchedule[slot.toString()] ? 'text-white' : 'text-slate-900 dark:text-slate-100'"
+                      :class="selectedSlots.includes(slot) ? 'text-white dark:text-slate-900' : 'text-slate-900 dark:text-slate-100'"
                   >
                     {{ TIME_MAPPING[slot] }}
                   </div>
@@ -1203,7 +1299,7 @@ const saveMeetingLink = async () => {
                   v-for="n in 3"
                   :key="n"
                   class="flex items-center gap-3 p-3 rounded-2xl transition-all border"
-                  :class="assignedAttempts.includes(n)
+                  :class="isAttemptUnavailable(n)
                   ? 'opacity-40 cursor-not-allowed border-transparent bg-slate-50 dark:bg-white/[0.03]'
                   : 'cursor-pointer border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.03] hover:border-slate-300 dark:hover:border-white/15'"
               >
@@ -1211,22 +1307,22 @@ const saveMeetingLink = async () => {
                     type="radio"
                     v-model="attemptNumber"
                     :value="n"
-                    :disabled="assignedAttempts.includes(n)"
+                    :disabled="isAttemptUnavailable(n)"
                     class="w-4 h-4 text-[var(--accent)] disabled:cursor-not-allowed"
                 />
 
                 <span
                     class="text-sm font-semibold"
                     :class="[
-                    assignedAttempts.includes(n)
+                    isAttemptUnavailable(n)
                       ? 'text-slate-400 dark:text-slate-500 line-through'
                       : n === 3
                         ? 'text-[var(--accent-strong)]'
                         : 'text-slate-800 dark:text-slate-200'
                   ]"
                 >
-                  {{ n }}-я пересдача {{ n > 1 ? '(Комиссия)' : '' }}
-                  <span v-if="assignedAttempts.includes(n)" class="text-xs ml-1 font-normal">(Назначена)</span>
+                  {{ n }}-я пересдача {{ (formContext.attemptRules.find(rule => rule.attemptNumber === n)?.requiresChairman || (formContext.attemptRules.find(rule => rule.attemptNumber === n)?.minCommissionMembers ?? 0) > 0) ? '(Комиссия)' : '' }}
+                  <span v-if="isAttemptUnavailable(n)" class="text-xs ml-1 font-normal">(Назначена)</span>
                 </span>
               </label>
             </div>
@@ -1297,7 +1393,7 @@ const saveMeetingLink = async () => {
                     :key="uuid"
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 text-xs font-semibold"
                 >
-                  {{ formatShortName(availableMainTeachers.find(t => t.uuid === uuid)?.fullName) }}
+                  {{ formatShortName(availableMainTeachers.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
                   <X class="w-3 h-3 hover:text-blue-900 dark:hover:text-white cursor-pointer" @click.stop="removeMainTeacher(uuid)" />
                 </span>
               </div>
@@ -1350,7 +1446,7 @@ const saveMeetingLink = async () => {
             <div class="relative">
               <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
                 Председатель
-                <span v-if="attemptNumber > 1" class="text-red-500">*</span>
+                <span v-if="currentAttemptRule.requiresChairman" class="text-red-500">*</span>
               </label>
 
               <div
@@ -1415,6 +1511,7 @@ const saveMeetingLink = async () => {
             <div class="relative">
               <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
                 Члены комиссии
+                <span v-if="currentAttemptRule.minCommissionMembers > 0" class="text-red-500">*</span>
               </label>
 
               <div
@@ -1435,7 +1532,7 @@ const saveMeetingLink = async () => {
                     :key="uuid"
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold"
                 >
-                  {{ formatShortName(availableCommissionTeachers.find(t => t.uuid === uuid)?.fullName) }}
+                  {{ formatShortName(availableCommissionTeachers.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
                   <X class="w-3 h-3 hover:text-red-500 cursor-pointer" @click.stop="removeCommTeacher(uuid)" />
                 </span>
               </div>
@@ -1482,7 +1579,14 @@ const saveMeetingLink = async () => {
       </div>
 
       <!-- Submit -->
-      <div class="flex justify-end pt-6 border-t border-[var(--panel-border)]">
+      <div class="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-[var(--panel-border)]">
+        <button
+            v-if="editingRetakeId"
+            @click="cancelRetakeEdit"
+            class="h-12 px-6 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] text-sm font-bold text-slate-700 hover:border-[var(--panel-border-strong)] dark:text-slate-200 transition-all"
+        >
+          Отменить
+        </button>
         <button
             @click="submitRetake"
             :disabled="isSubmitting || subjectBelongsToAnotherDept"
@@ -1490,7 +1594,7 @@ const saveMeetingLink = async () => {
         >
           <div v-if="isSubmitting" class="w-5 h-5 rounded-full border-2 border-white dark:border-slate-900 border-t-transparent animate-spin"></div>
           <CheckCircle v-else class="w-5 h-5" />
-          Сохранить
+          {{ editingRetakeId ? 'Сохранить изменения' : 'Сохранить' }}
         </button>
       </div>
     </div>

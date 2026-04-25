@@ -14,6 +14,7 @@ type TeacherItem = { id: number; full_name: string; department_id: number; posit
 type PastSemesterStatus = { isLoaded: boolean; importedRecords: number; uniqueGroups: number; uniqueSubjects: number; dateRangeStart: string | null; dateRangeEnd: string | null };
 type AuditLogItem = { id: number; createdAt: string; actorUserId: number | null; action: string; targetType: string | null; targetId: string | null; status: string; ipAddress: string | null; userAgent: string | null; details: Record<string, unknown> | null };
 type AuditLogListResponse = { items: AuditLogItem[]; total: number; limit: number; offset: number };
+type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   'auth.login': 'Вход в систему',
@@ -40,6 +41,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   'admin.schedule_snapshot.delete': 'Удаление снимка',
   'retake.create': 'Создание пересдачи',
   'retake.delete': 'Удаление пересдачи',
+  'admin.retakes.attempt_rule.update': 'Обновление правил попыток',
   'admin.retakes.import_past_semester': 'Импорт прошлого семестра',
   'admin.retakes.import_past_semester_json': 'Импорт JSON прошлого семестра',
   'admin.retakes.import_current_semester_as_past': 'Перенос текущего семестра в архив',
@@ -67,6 +69,7 @@ const teacherDirectory = ref([...props.initialTeacherDirectory]);
 const positions = ref([...props.initialPositions]);
 const teachers = ref([...props.initialTeachers]);
 const scheduleSnapshots = ref([...props.initialScheduleSnapshots]);
+const attemptRules = ref<RetakeAttemptRule[]>([]);
 const auditLogs = ref([...props.initialAuditLogs.items]);
 const auditTotal = ref(props.initialAuditLogs.total);
 const status = ref<{ kind: StatusKind; message: string } | null>(
@@ -86,6 +89,7 @@ const activeTab = ref('teachers');
 const tabs = [
   { id: 'teachers', label: 'Преподаватели' },
   { id: 'departments', label: 'Кафедры и должности' },
+  { id: 'settings', label: 'Настройки' },
   { id: 'snapshots', label: 'Снимки расписания' },
   { id: 'audit', label: 'Журнал действий' },
 ];
@@ -98,6 +102,7 @@ const busy = reactive({
   syncTeachers: false,
   importPastSemester: false,
   syncSchedule: false,
+  attemptRules: false,
   createAccount: '' as string,
   updateTeacherPosition: '' as string,
 });
@@ -305,7 +310,7 @@ async function reloadAll() {
   busy.reload = true;
   resetTeacherInlineForm();
   try {
-    const [u, d, td, p, t, s, a] = await Promise.all([
+    const [u, d, td, p, t, s, a, ar] = await Promise.all([
       fetchBackendFromBrowser<UserItem[]>(props.backendApiUrl, '/users/'),
       fetchBackendFromBrowser<DepartmentItem[]>(props.backendApiUrl, '/departments/'),
       fetchBackendFromBrowser<TeacherDirectoryItem[]>(props.backendApiUrl, '/teacher-directory/'),
@@ -313,11 +318,43 @@ async function reloadAll() {
       fetchBackendFromBrowser<TeacherItem[]>(props.backendApiUrl, '/teachers/'),
       fetchBackendFromBrowser<SnapshotSummary[]>(props.backendApiUrl, '/schedule-snapshots/'),
       fetchBackendFromBrowser<AuditLogListResponse>(props.backendApiUrl, buildAuditLogsPath()),
+      fetchBackendFromBrowser<RetakeAttemptRule[]>(props.backendApiUrl, '/retakes/attempt-rules'),
     ]);
-    users.value = u; departments.value = d; teacherDirectory.value = td; positions.value = p; teachers.value = t; scheduleSnapshots.value = s; auditLogs.value = a.items; auditTotal.value = a.total;
+    users.value = u; departments.value = d; teacherDirectory.value = td; positions.value = p; teachers.value = t; scheduleSnapshots.value = s; auditLogs.value = a.items; auditTotal.value = a.total; attemptRules.value = ar;
     await loadPastSemesterStatus(true);
   } catch (error) { setStatus('error', errorText(error, 'Ошибка обновления данных.')); }
   finally { busy.reload = false; }
+}
+
+async function loadAttemptRules(silent = false) {
+  try {
+    attemptRules.value = await fetchBackendFromBrowser<RetakeAttemptRule[]>(props.backendApiUrl, '/retakes/attempt-rules');
+  } catch (error) {
+    if (!silent) setStatus('error', errorText(error, 'Не удалось загрузить правила попыток.'));
+  }
+}
+
+async function saveAttemptRule(rule: RetakeAttemptRule) {
+  busy.attemptRules = true;
+  try {
+    const updated = await fetchBackendFromBrowser<RetakeAttemptRule>(
+      props.backendApiUrl,
+      `/retakes/admin/attempt-rules/${rule.attemptNumber}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          requiresChairman: rule.requiresChairman,
+          minCommissionMembers: Number(rule.minCommissionMembers),
+        }),
+      },
+    );
+    attemptRules.value = attemptRules.value.map((item) => item.attemptNumber === updated.attemptNumber ? updated : item);
+    setStatus('success', 'Правило попытки обновлено.');
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось обновить правило попытки.'));
+  } finally {
+    busy.attemptRules = false;
+  }
 }
 
 function buildAuditLogsPath() {
@@ -687,6 +724,7 @@ function formatAuditDetails(details: Record<string, unknown> | null) {
 
 onMounted(() => {
   loadPastSemesterStatus(true);
+  loadAttemptRules(true);
 });
 </script>
 
@@ -994,6 +1032,49 @@ onMounted(() => {
           <div class="flex gap-3 pt-2">
             <button @click="createAccountForTeacher" :disabled="!!busy.createAccount" class="flex-1 h-11 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">Создать аккаунт</button>
             <button @click="showAccountModal = false" class="px-6 h-11 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SETTINGS TAB ==================== -->
+    <div v-if="activeTab === 'settings'" class="space-y-6">
+      <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-950 dark:text-white">Правила попыток</h2>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Глобальные требования к составу комиссии для всех кафедр.</p>
+          </div>
+          <button @click="loadAttemptRules()" class="h-10 rounded-xl border border-slate-300 px-4 text-sm font-bold dark:border-white/10 dark:text-white">
+            Обновить
+          </button>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-3">
+          <div
+            v-for="rule in attemptRules"
+            :key="rule.attemptNumber"
+            class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-black/20"
+          >
+            <div class="mb-3 text-sm font-black text-slate-900 dark:text-white">{{ rule.attemptNumber }}-я попытка</div>
+            <label class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <input v-model="rule.requiresChairman" type="checkbox" class="h-4 w-4 rounded border-slate-300">
+              Нужен председатель
+            </label>
+            <label class="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Мин. членов комиссии</label>
+            <input
+              v-model.number="rule.minCommissionMembers"
+              type="number"
+              min="0"
+              class="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
+            />
+            <button
+              @click="saveAttemptRule(rule)"
+              :disabled="busy.attemptRules"
+              class="mt-3 h-10 w-full rounded-xl bg-slate-950 text-sm font-black text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
+            >
+              Сохранить
+            </button>
           </div>
         </div>
       </div>

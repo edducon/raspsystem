@@ -5,39 +5,61 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "20260424_10"
-down_revision = "20260407_09"
+down_revision = "20260420_10"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
-    op.create_table(
-        "retake_meetings",
-        sa.Column("id", postgresql.UUID(as_uuid=False), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("department_id", sa.Integer(), nullable=True),
-        sa.Column("date", sa.String(length=10), nullable=False),
-        sa.Column("link", sa.Text(), nullable=True),
-        sa.Column("title", sa.String(length=255), nullable=True),
-        sa.Column("created_by", sa.String(length=50), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=False), nullable=False, server_default=sa.text("now()")),
-        sa.ForeignKeyConstraint(["department_id"], ["departments.id"]),
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS retake_meetings (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            department_id integer NULL REFERENCES departments(id),
+            date varchar(10) NOT NULL,
+            link text NULL,
+            title varchar(255) NULL,
+            created_by varchar(50) NULL,
+            created_at timestamp without time zone NOT NULL DEFAULT now()
+        )
+        """
     )
-    op.create_index("ix_retake_meetings_department_id", "retake_meetings", ["department_id"], unique=False)
-    op.create_index("ix_retake_meetings_date", "retake_meetings", ["date"], unique=False)
-    op.add_column("retakes", sa.Column("meeting_id", postgresql.UUID(as_uuid=False), nullable=True))
-    op.add_column("retakes", sa.Column("department_id", sa.Integer(), nullable=True))
-    op.create_index("ix_retakes_meeting_id", "retakes", ["meeting_id"], unique=False)
-    op.create_index("ix_retakes_department_id", "retakes", ["department_id"], unique=False)
-    op.create_foreign_key("fk_retakes_meeting_id_retake_meetings", "retakes", "retake_meetings", ["meeting_id"], ["id"], ondelete="SET NULL")
-    op.create_foreign_key("fk_retakes_department_id_departments", "retakes", "departments", ["department_id"], ["id"])
-    op.create_table(
-        "retake_lead_teachers",
-        sa.Column("retake_id", postgresql.UUID(as_uuid=False), nullable=False),
-        sa.Column("teacher_uuid", postgresql.UUID(as_uuid=False), nullable=False),
-        sa.ForeignKeyConstraint(["retake_id"], ["retakes.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["teacher_uuid"], ["teachers_local.uuid"]),
-        sa.PrimaryKeyConstraint("retake_id", "teacher_uuid"),
+    op.execute("CREATE INDEX IF NOT EXISTS ix_retake_meetings_department_id ON retake_meetings (department_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_retake_meetings_date ON retake_meetings (date)")
+    op.execute("ALTER TABLE retakes ADD COLUMN IF NOT EXISTS meeting_id uuid NULL")
+    op.execute("ALTER TABLE retakes ADD COLUMN IF NOT EXISTS department_id integer NULL")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_retakes_meeting_id ON retakes (meeting_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_retakes_department_id ON retakes (department_id)")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'fk_retakes_meeting_id_retake_meetings'
+            ) THEN
+                ALTER TABLE retakes
+                ADD CONSTRAINT fk_retakes_meeting_id_retake_meetings
+                FOREIGN KEY (meeting_id) REFERENCES retake_meetings(id) ON DELETE SET NULL;
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'fk_retakes_department_id_departments'
+            ) THEN
+                ALTER TABLE retakes
+                ADD CONSTRAINT fk_retakes_department_id_departments
+                FOREIGN KEY (department_id) REFERENCES departments(id);
+            END IF;
+        END $$;
+        """
+    )
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS retake_lead_teachers (
+            retake_id uuid NOT NULL REFERENCES retakes(id) ON DELETE CASCADE,
+            teacher_uuid uuid NOT NULL REFERENCES teachers_local(uuid),
+            PRIMARY KEY (retake_id, teacher_uuid)
+        )
+        """
     )
     op.execute(
         """
