@@ -9,7 +9,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Users,
 } from 'lucide-vue-next';
 import { getDateLabel, daysUntil } from '../lib/dateUtils';
 import { useRecentGroups } from '../composables/useRecentGroups';
@@ -29,8 +28,9 @@ const props = defineProps<{
 const groupSearchQuery = ref('');
 const selectedGroupUuid = ref('');
 const showGroupDropdown = ref(false);
-const selectedSubjectFilter = ref('');
 const selectedDateFilter = ref('');
+const activeAttemptBySubject = ref<Record<string, string | number>>({});
+
 const { recentGroups, addRecentGroup, clearRecentGroups } = useRecentGroups();
 
 const baseDate = props.today ? new Date(props.today) : new Date();
@@ -48,7 +48,10 @@ const TIME_MAPPING: Record<number, string> = {
 
 const filteredGroups = computed(() => {
   if (!groupSearchQuery.value) return props.groups.slice(0, 20);
-  return props.groups.filter((group) => matchesGroupQuery(group.number, groupSearchQuery.value)).slice(0, 20);
+
+  return props.groups
+      .filter((group) => matchesGroupQuery(group.number, groupSearchQuery.value))
+      .slice(0, 20);
 });
 
 const studentRetakes = computed(() => {
@@ -58,34 +61,48 @@ const studentRetakes = computed(() => {
       .filter((retake) => retake.groupUuid === selectedGroupUuid.value)
       .map((retake) => ({
         ...retake,
-        teachers: sortTeachers(retake.teachers || []),
         dateLabel: getDateLabel(retake.date),
         daysDelta: daysUntil(retake.date),
       }))
+      .filter((retake) => retake.daysDelta >= 0)
       .sort((a, b) => {
-        const pastA = daysUntil(a.date) < 0 ? 1 : 0;
-        const pastB = daysUntil(b.date) < 0 ? 1 : 0;
+        const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
 
-        if (pastA !== pastB) return pastA - pastB;
-        return new Date(a.date).getTime() - new Date(b.date).getTime();
+        return (a.attemptNumber || 1) - (b.attemptNumber || 1);
       });
-});
-
-const availableSubjects = computed(() => {
-  const subjects = new Set<string>();
-  studentRetakes.value.forEach((retake) => subjects.add(retake.subjectName));
-  return Array.from(subjects).sort();
 });
 
 const availableDateSet = computed(() => new Set(studentRetakes.value.map((retake) => retake.date)));
 
 const filteredRetakes = computed(() =>
     studentRetakes.value.filter((retake) => {
-      const subjectOk = !selectedSubjectFilter.value || retake.subjectName === selectedSubjectFilter.value;
       const dateOk = !selectedDateFilter.value || retake.date === selectedDateFilter.value;
-      return subjectOk && dateOk;
+      return dateOk;
     }),
 );
+
+const retakesBySubject = computed(() => {
+  const map = new Map<string, any[]>();
+
+  filteredRetakes.value.forEach((retake) => {
+    const subjectName = retake.subjectName || 'Без названия';
+
+    if (!map.has(subjectName)) {
+      map.set(subjectName, []);
+    }
+
+    map.get(subjectName)?.push(retake);
+  });
+
+  return Array.from(map.entries()).map(([subjectName, retakes]) => ({
+    subjectName,
+    retakes: retakes
+        .slice()
+        .sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1))
+        .slice(0, 3),
+  }));
+});
 
 const nearestUpcomingRetake = computed(() => filteredRetakes.value.find((retake) => retake.daysDelta >= 0) ?? null);
 
@@ -142,6 +159,7 @@ const calendarDays = computed(() => {
 
   while (days.length % 7 !== 0) {
     const idx = days.length;
+
     days.push({
       key: `empty-end-${idx}`,
       label: '',
@@ -163,8 +181,8 @@ function handleGroupInput(event: Event) {
 
   groupSearchQuery.value = formatted;
   selectedGroupUuid.value = '';
-  selectedSubjectFilter.value = '';
   selectedDateFilter.value = '';
+  activeAttemptBySubject.value = {};
   showGroupDropdown.value = true;
 
   nextTick(() => {
@@ -173,27 +191,16 @@ function handleGroupInput(event: Event) {
   });
 }
 
-function sortTeachers(teachers: any[]) {
-  if (!teachers) return [];
-
-  const roleWeights: Record<string, number> = {
-    MAIN: 1,
-    CHAIRMAN: 2,
-    COMMISSION: 3,
-  };
-
-  return [...teachers].sort((a, b) => (roleWeights[a.role] || 99) - (roleWeights[b.role] || 99));
-}
-
 function selectGroup(group: { uuid: string; number: string }) {
   selectedGroupUuid.value = group.uuid;
   groupSearchQuery.value = group.number;
   showGroupDropdown.value = false;
-  selectedSubjectFilter.value = '';
   selectedDateFilter.value = '';
+  activeAttemptBySubject.value = {};
   addRecentGroup(group);
 
   const firstDate = studentRetakes.value[0]?.date;
+
   if (firstDate) {
     const date = new Date(firstDate);
     openMonth.value = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -205,8 +212,8 @@ function selectGroup(group: { uuid: string; number: string }) {
 function clearSelectedGroup() {
   selectedGroupUuid.value = '';
   groupSearchQuery.value = '';
-  selectedSubjectFilter.value = '';
   selectedDateFilter.value = '';
+  activeAttemptBySubject.value = {};
   showGroupDropdown.value = false;
   openMonth.value = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
 }
@@ -226,37 +233,58 @@ function nextMonth() {
 function pickDate(iso: string, isAvailable: boolean) {
   if (!iso || !isAvailable) return;
   selectedDateFilter.value = selectedDateFilter.value === iso ? '' : iso;
+  activeAttemptBySubject.value = {};
 }
 
-function getTeacherName(teacher: any) {
-  return teacher?.name || teacher?.fullName || teacher?.fio || teacher?.teacherName || teacher?.displayName || 'Преподаватель';
+function getActiveAttempt(subjectName: string, retakes: any[]) {
+  return activeAttemptBySubject.value[subjectName] ?? retakes[0]?.id;
 }
 
-function formatDate(dateStr: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(dateStr));
+function setActiveAttempt(subjectName: string, retakeId: number | string) {
+  activeAttemptBySubject.value = {
+    ...activeAttemptBySubject.value,
+    [subjectName]: retakeId,
+  };
 }
 
-function formatShortDate(dateStr: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(dateStr));
+function isActiveAttempt(subjectName: string, retakes: any[], retake: any) {
+  if (retakes.length === 1) return true;
+  return getActiveAttempt(subjectName, retakes) === retake.id;
 }
 
-function getRoleName(role: string) {
-  if (role === 'MAIN') return 'Ведущий';
-  if (role === 'CHAIRMAN') return 'Председатель';
-  return 'Комиссия';
+function getPanelClass(subjectName: string, retakes: any[], retake: any) {
+  if (retakes.length === 1) {
+    return 'min-h-[220px] flex-1 p-5 cursor-default';
+  }
+
+  if (isActiveAttempt(subjectName, retakes, retake)) {
+    return 'min-h-[240px] flex-[3.2] p-5';
+  }
+
+  return 'min-h-[96px] flex-[0.78] p-4 md:min-h-[240px]';
 }
 
-function getRoleTone(role: string) {
-  if (role === 'MAIN') return 'text-[var(--accent-strong)] bg-[var(--accent-soft)]';
-  if (role === 'CHAIRMAN') return 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10';
-  return 'text-slate-600 dark:text-slate-300 bg-[var(--panel-muted)]';
+function getDateParts(dateStr: string) {
+  const date = new Date(dateStr);
+
+  return {
+    day: new Intl.DateTimeFormat('ru-RU', {
+      day: 'numeric',
+    }).format(date),
+    month: new Intl.DateTimeFormat('ru-RU', {
+      month: 'short',
+    })
+        .format(date)
+        .replace('.', ''),
+    year: new Intl.DateTimeFormat('ru-RU', {
+      year: 'numeric',
+    }).format(date),
+  };
+}
+
+function formatTimeSlots(slots: number[]) {
+  if (!Array.isArray(slots) || slots.length === 0) return 'Время уточняется';
+  return slots.map((slot) => TIME_MAPPING[slot] || `Пара ${slot}`).join(', ');
 }
 
 function getAttemptTone(attempt: number) {
@@ -266,14 +294,10 @@ function getAttemptTone(attempt: number) {
 }
 
 function getStatusText(daysDelta: number) {
-  if (daysDelta < 0) return 'Архив';
   if (daysDelta === 0) return 'Сегодня';
-  if (daysDelta <= 3) return 'Скоро';
-  return 'Запланировано';
 }
 
 function getStatusTone(daysDelta: number) {
-  if (daysDelta < 0) return 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
   if (daysDelta === 0) return 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300';
   if (daysDelta <= 3) return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300';
   return 'bg-[var(--accent-soft)] text-[var(--accent-strong)]';
@@ -289,129 +313,91 @@ function toIsoDate(date: Date) {
 </script>
 
 <template>
-  <div class="w-full space-y-5">
-    <section class="rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow)]">
-      <div class="px-5 pb-5 pt-6 lg:px-6 lg:pt-7">
-        <div class="mb-5 flex flex-col gap-2">
-          <h2 class="text-2xl font-black tracking-tight text-slate-950 dark:text-white lg:text-3xl">
-            Найдите пересдачи своей группы
-          </h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400">
-            Введите номер группы и выберите дату справа, если нужно отфильтровать результаты.
-          </p>
-        </div>
+  <div class="w-full">
+    <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
+      <div class="max-w-[980px] space-y-5">
+        <section class="rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow)]">
+          <div class="px-5 pb-5 pt-6 lg:px-6 lg:pt-7">
+            <div class="mb-5 flex flex-col gap-2">
+              <h2 class="text-2xl font-black tracking-tight text-slate-950 dark:text-white lg:text-3xl">
+                Найдите пересдачи своей группы
+              </h2>
+              <p class="text-sm text-slate-500 dark:text-slate-400">
+                Введите номер группы.
+              </p>
+            </div>
 
-        <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <div class="relative">
-            <Search class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input
-                :value="groupSearchQuery"
-                @focus="showGroupDropdown = true"
-                @input="handleGroupInput"
-                type="text"
-                placeholder="Например: 241-321"
-                class="h-[58px] w-full rounded-[20px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] pl-12 pr-4 text-base font-semibold text-slate-900 outline-none focus:border-[var(--accent)] dark:text-white"
-            />
-          </div>
+            <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <div class="relative">
+                <Search class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <input
+                    :value="groupSearchQuery"
+                    @focus="showGroupDropdown = true"
+                    @input="handleGroupInput"
+                    type="text"
+                    placeholder="Например: 241-321"
+                    class="h-[58px] w-full rounded-[20px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] pl-12 pr-4 text-base font-semibold text-slate-900 outline-none focus:border-[var(--accent)] dark:text-white"
+                />
+              </div>
 
-          <button
-              @click="clearSelectedGroup"
-              class="h-[58px] rounded-[20px] border border-slate-900 bg-slate-900 px-5 text-sm font-bold text-white dark:border-white dark:bg-white dark:text-slate-900"
-          >
-            Сбросить
-          </button>
-        </div>
-
-        <div
-            v-if="showGroupDropdown && (filteredGroups.length > 0 || (recentGroups.length > 0 && !groupSearchQuery))"
-            class="relative z-30 mt-3 max-h-80 overflow-y-auto rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] shadow-[var(--panel-shadow)]"
-        >
-          <div v-if="recentGroups.length > 0 && !groupSearchQuery" class="border-b border-[var(--panel-border)]">
-            <div class="flex items-center justify-between px-4 py-3">
-              <span class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Недавние группы</span>
               <button
-                  @click.stop="clearRecentGroups"
-                  class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-[var(--accent-strong)]"
+                  @click="clearSelectedGroup"
+                  class="h-[58px] rounded-[20px] border border-slate-900 bg-slate-900 px-5 text-sm font-bold text-white dark:border-white dark:bg-white dark:text-slate-900"
               >
-                Очистить
+                Сбросить
               </button>
             </div>
 
             <div
-                v-for="group in recentGroups"
-                :key="`recent-${group.uuid}`"
-                @click="selectGroup(group)"
-                class="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--panel-muted)] dark:text-slate-200"
+                v-if="showGroupDropdown && (filteredGroups.length > 0 || (recentGroups.length > 0 && !groupSearchQuery))"
+                class="relative z-30 mt-3 max-h-80 overflow-y-auto rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] shadow-[var(--panel-shadow)]"
             >
-              <Clock class="h-4 w-4 shrink-0 text-slate-400" />
-              <span>{{ group.number }}</span>
+              <div v-if="recentGroups.length > 0 && !groupSearchQuery" class="border-b border-[var(--panel-border)]">
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Недавние группы</span>
+                  <button
+                      @click.stop="clearRecentGroups"
+                      class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-[var(--accent-strong)]"
+                  >
+                    Очистить
+                  </button>
+                </div>
+
+                <div
+                    v-for="group in recentGroups"
+                    :key="`recent-${group.uuid}`"
+                    @click="selectGroup(group)"
+                    class="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--panel-muted)] dark:text-slate-200"
+                >
+                  <Clock class="h-4 w-4 shrink-0 text-slate-400" />
+                  <span>{{ group.number }}</span>
+                </div>
+              </div>
+
+              <div
+                  v-for="group in filteredGroups"
+                  :key="group.uuid"
+                  @click="selectGroup(group)"
+                  class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--panel-muted)] dark:text-slate-200"
+              >
+                {{ group.number }}
+              </div>
+            </div>
+
+            <div v-if="selectedGroupUuid" class="mt-4 flex items-center justify-end">
+              <button
+                  @click="clearSelectedGroup"
+                  class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
+              >
+                <X class="h-4 w-4" />
+                Сменить группу
+              </button>
             </div>
           </div>
 
-          <div
-              v-for="group in filteredGroups"
-              :key="group.uuid"
-              @click="selectGroup(group)"
-              class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--panel-muted)] dark:text-slate-200"
-          >
-            {{ group.number }}
-          </div>
-        </div>
+          <div v-if="showGroupDropdown" @click="showGroupDropdown = false" class="fixed inset-0 z-20"></div>
+        </section>
 
-        <div
-            v-if="selectedGroupUuid"
-            class="mt-4 flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--panel-border)] bg-[var(--panel-muted)] p-3"
-        >
-          <div class="inline-flex items-center gap-2 rounded-full border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Группа: {{ groupSearchQuery }}
-          </div>
-
-          <button
-              v-if="availableSubjects.length > 1"
-              @click="selectedSubjectFilter = ''"
-              :class="selectedSubjectFilter === ''
-              ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-              : 'border-[var(--panel-border)] bg-[var(--panel-bg)] text-slate-600 dark:text-slate-300'"
-              class="rounded-full border px-3 py-1.5 text-sm font-semibold"
-          >
-            Все предметы
-          </button>
-
-          <button
-              v-for="subject in availableSubjects"
-              :key="subject"
-              @click="selectedSubjectFilter = subject"
-              :class="selectedSubjectFilter === subject
-              ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-              : 'border-[var(--panel-border)] bg-[var(--panel-bg)] text-slate-600 dark:text-slate-300'"
-              class="rounded-full border px-3 py-1.5 text-sm font-semibold"
-          >
-            {{ subject }}
-          </button>
-
-          <button
-              v-if="selectedDateFilter"
-              @click="clearDateFilter"
-              class="rounded-full border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
-          >
-            Сбросить дату
-          </button>
-
-          <button
-              @click="clearSelectedGroup"
-              class="ml-auto inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
-          >
-            <X class="h-4 w-4" />
-            Сменить группу
-          </button>
-        </div>
-      </div>
-
-      <div v-if="showGroupDropdown" @click="showGroupDropdown = false" class="fixed inset-0 z-20"></div>
-    </section>
-
-    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div class="space-y-4">
         <section
             v-if="!selectedGroupUuid"
             class="rounded-[28px] border border-dashed border-[var(--panel-border)] bg-[var(--panel-bg)] px-6 py-16 text-center"
@@ -421,7 +407,7 @@ function toIsoDate(date: Date) {
           </div>
           <h3 class="text-xl font-black tracking-tight text-slate-900 dark:text-white">Введите номер группы</h3>
           <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            После выбора группы здесь появятся все назначенные пересдачи.
+            После выбора группы здесь появятся назначенные пересдачи.
           </p>
         </section>
 
@@ -434,7 +420,7 @@ function toIsoDate(date: Date) {
           </div>
           <h3 class="text-xl font-black tracking-tight text-slate-900 dark:text-white">Пересдачи не назначены</h3>
           <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Для группы <span class="font-semibold text-slate-700 dark:text-slate-300">{{ groupSearchQuery }}</span> записей пока нет.
+            Для группы <span class="font-semibold text-slate-700 dark:text-slate-300">{{ groupSearchQuery }}</span> актуальных пересдач нет.
           </p>
         </section>
 
@@ -447,128 +433,148 @@ function toIsoDate(date: Date) {
           </div>
           <h3 class="text-xl font-black tracking-tight text-slate-900 dark:text-white">Ничего не найдено</h3>
           <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Попробуйте сбросить фильтр по дате или предмету.
+            Попробуйте сбросить выбранную дату.
           </p>
+
+          <button
+              v-if="selectedDateFilter"
+              @click="clearDateFilter"
+              class="mt-4 rounded-full border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 py-2 text-sm font-semibold text-[var(--accent-strong)]"
+          >
+            Сбросить дату
+          </button>
         </section>
 
         <section v-else class="space-y-4">
           <article
-              v-for="retake in filteredRetakes"
-              :key="retake.id"
-              class="rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-5 shadow-[var(--panel-shadow)]"
+              v-for="subjectGroup in retakesBySubject"
+              :key="subjectGroup.subjectName"
+              class="overflow-hidden rounded-[30px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-2 shadow-[var(--panel-shadow)]"
           >
-            <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div class="min-w-0 flex-1 space-y-4">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" :class="getStatusTone(retake.daysDelta)">
-                    {{ getStatusText(retake.daysDelta) }}
-                  </span>
+            <div class="flex h-[270px] flex-col gap-2 md:flex-row">
+              <button
+                  v-for="retake in subjectGroup.retakes"
+                  :key="retake.id"
+                  type="button"
+                  @click="subjectGroup.retakes.length > 1 && setActiveAttempt(subjectGroup.subjectName, retake.id)"
+                  class="group relative overflow-hidden rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] text-left transition-[width,background-color,border-color,box-shadow] duration-500 ease-in-out"
+                  :class="getPanelClass(subjectGroup.subjectName, subjectGroup.retakes, retake)"
+              >
+                <div class="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-[radial-gradient(circle_at_top_right,rgba(90,122,165,0.16),transparent_45%)]"></div>
 
-                  <span class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]" :class="getAttemptTone(retake.attemptNumber || 1)">
-                    Попытка {{ retake.attemptNumber || 1 }}
-                  </span>
-
-                  <span
-                      v-if="retake.id === nearestUpcomingRetake?.id"
-                      class="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:bg-white dark:text-slate-900"
-                  >
-                    Ближайшая
-                  </span>
-                </div>
-
-                <div>
-                  <h3 class="text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-                    {{ retake.subjectName }}
-                  </h3>
-                  <p class="mt-1 text-sm font-medium" :class="retake.dateLabel.colorClass">
-                    {{ retake.dateLabel.text }}
-                  </p>
-                </div>
-
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 py-3">
-                    <div class="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Дата</div>
-                    <div class="text-base font-bold text-slate-900 dark:text-white">{{ formatShortDate(retake.date) }}</div>
-                    <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ formatDate(retake.date) }}</div>
-                  </div>
-
-                  <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 py-3">
-                    <div class="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      <Clock class="h-3.5 w-3.5" />
-                      Время
-                    </div>
-                    <div class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {{ retake.timeSlots.map((slot: number) => TIME_MAPPING[slot]).join(', ') }}
-                    </div>
-                  </div>
-
-                  <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 py-3">
-                    <div class="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      <component :is="retake.link ? Globe : MapPin" class="h-3.5 w-3.5" />
-                      Формат
-                    </div>
-
-                    <a
-                        v-if="retake.link"
-                        :href="retake.link"
-                        target="_blank"
-                        class="text-sm font-semibold text-[var(--accent-strong)] hover:underline"
-                    >
-                      Открыть ссылку
-                    </a>
-
-                    <div v-else class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {{ retake.room || 'Аудитория уточняется' }}
-                    </div>
-                  </div>
-
-                  <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 py-3">
-                    <div class="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      <Users class="h-3.5 w-3.5" />
-                      Комиссия
-                    </div>
-                    <div class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {{ retake.teachers?.length ? `${retake.teachers.length} чел.` : 'Не назначена' }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="w-full xl:max-w-[360px]">
-                <div class="rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] p-4">
-                  <div class="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Преподаватели
-                  </div>
-
+                <div
+                    v-if="subjectGroup.retakes.length > 1 && !isActiveAttempt(subjectGroup.subjectName, subjectGroup.retakes, retake)"
+                    class="relative flex h-full flex-col items-start justify-between"
+                >
                   <div
-                      v-if="retake.teachers && retake.teachers.length > 0"
-                      class="space-y-2"
+                      class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+                      :class="getAttemptTone(retake.attemptNumber || 1)"
                   >
-                    <div
-                        v-for="teacher in retake.teachers"
-                        :key="`${retake.id}-${getTeacherName(teacher)}-${teacher.role}`"
-                        class="flex items-center justify-between gap-3 rounded-[16px] border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-2.5"
-                    >
-                      <div class="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        {{ getTeacherName(teacher) }}
-                      </div>
-                      <span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-bold" :class="getRoleTone(teacher.role)">
-                        {{ getRoleName(teacher.role) }}
+                    Попытка {{ retake.attemptNumber || 1 }}
+                  </div>
+
+                  <div class="space-y-1">
+                    <div class="text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">
+                      {{ getDateParts(retake.date).day }}
+                    </div>
+                    <div class="text-sm font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                      {{ getDateParts(retake.date).month }}
+                    </div>
+                    <div class="text-xs font-semibold text-slate-400">
+                      {{ getDateParts(retake.date).year }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="relative flex h-full flex-col justify-between gap-5">
+                  <div>
+                    <div class="mb-4 flex flex-wrap items-center gap-2">
+                      <span
+                          class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+                          :class="getStatusTone(retake.daysDelta)"
+                      >
+                        {{ getStatusText(retake.daysDelta) }}
+                      </span>
+
+                      <span
+                          class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+                          :class="getAttemptTone(retake.attemptNumber || 1)"
+                      >
+                        Попытка {{ retake.attemptNumber || 1 }}
+                      </span>
+
+                      <span
+                          v-if="retake.id === nearestUpcomingRetake?.id"
+                          class="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:bg-white dark:text-slate-900"
+                      >
+                        Ближайшая
                       </span>
                     </div>
+
+                    <h3 class="max-w-2xl text-2xl font-black leading-tight tracking-tight text-slate-950 dark:text-white">
+                      {{ subjectGroup.subjectName }}
+                    </h3>
                   </div>
 
-                  <div v-else class="text-sm italic text-slate-400">
-                    Преподаватели не назначены
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg)] px-4 py-3 text-center">
+                      <div class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                        Дата
+                      </div>
+                      <div class="text-3xl font-black leading-none text-slate-900 dark:text-white">
+                        {{ getDateParts(retake.date).day }}
+                      </div>
+                      <div class="mt-1 text-sm font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                        {{ getDateParts(retake.date).month }}
+                      </div>
+                      <div class="mt-0.5 text-xs font-semibold text-slate-400">
+                        {{ getDateParts(retake.date).year }}
+                      </div>
+                    </div>
+
+                    <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg)] px-4 py-3">
+                      <div class="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                        <Clock class="h-3.5 w-3.5" />
+                        Время
+                      </div>
+                      <div class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {{ formatTimeSlots(retake.timeSlots) }}
+                      </div>
+                    </div>
+
+                    <div class="rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg)] px-4 py-3">
+                      <div class="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                        <component :is="retake.link ? Globe : MapPin" class="h-3.5 w-3.5" />
+                        Формат
+                      </div>
+
+                      <div v-if="retake.link" class="space-y-1">
+                        <div class="text-sm font-bold text-slate-900 dark:text-white">
+                          Онлайн
+                        </div>
+                        <a
+                            :href="retake.link"
+                            target="_blank"
+                            @click.stop
+                            class="text-sm font-semibold text-[var(--accent-strong)] hover:underline"
+                        >
+                          Ссылка
+                        </a>
+                      </div>
+
+                      <div v-else class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {{ retake.room || 'Аудитория уточняется' }}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
           </article>
         </section>
       </div>
 
-      <aside class="xl:sticky xl:top-24 xl:self-start">
+      <aside class="xl:sticky xl:top-24 xl:self-start xl:pl-2 2xl:pl-4">
         <section class="rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--panel-shadow)]">
           <div class="mb-4 flex items-center justify-between">
             <div>
@@ -634,19 +640,13 @@ function toIsoDate(date: Date) {
             </button>
           </div>
 
-          <div class="mt-4 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] p-3">
-            <div v-if="!selectedGroupUuid" class="text-sm text-slate-500 dark:text-slate-400">
-            </div>
-
-            <div v-else class="space-y-2 text-sm text-slate-500 dark:text-slate-400">
-              <button
-                  v-if="selectedDateFilter"
-                  @click="clearDateFilter"
-                  class="font-semibold text-[var(--accent-strong)] hover:underline"
-              >
-                Сбросить выбранную дату
-              </button>
-            </div>
+          <div v-if="selectedDateFilter" class="mt-4 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] p-3">
+            <button
+                @click="clearDateFilter"
+                class="font-semibold text-[var(--accent-strong)] hover:underline"
+            >
+              Сбросить выбранную дату
+            </button>
           </div>
         </section>
       </aside>
