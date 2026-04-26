@@ -67,6 +67,21 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: python -m app.tasks.scheduler
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_SERVER}:${POSTGRES_PORT}/${POSTGRES_DB}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     volumes:

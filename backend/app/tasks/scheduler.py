@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models import ScheduleSnapshot
 from app.services.schedule_snapshot_service import ScheduleSnapshotService
 
 
@@ -12,9 +11,6 @@ def download_semester_job():
     now = datetime.now(timezone.utc)
     db = SessionLocal()
     try:
-        # Для теста игнорируем число и месяц, просто проверяем логику
-        target_date = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-
         print("[Scheduler] Пытаемся скачать расписание для будущего эталона...")
         service = ScheduleSnapshotService(db)
         result = service.sync_from_raspyx()
@@ -43,8 +39,7 @@ def activate_reference_job():
 
 
 def start_scheduler():
-    # Запускаем изолированный фоновый планировщик
-    scheduler = BackgroundScheduler()
+    scheduler = BlockingScheduler()
 
     # === НАСТОЯЩИЙ ТАЙМЕР (Боевой режим) ===
     # 1. Тихо качаем расписание в конце семестра (20, 22, 24, 26, 28, 30 числа в 03:00 ночи)
@@ -53,5 +48,9 @@ def start_scheduler():
     # 2. Делаем последний скачанный снимок эталоном (1 февраля и 1 сентября в 04:00 ночи)
     scheduler.add_job(activate_reference_job, 'cron', month='2,9', day='1', hour=4, minute=0)
 
+    print("[Scheduler] Изолированный Blocking-планировщик запущен.")
     scheduler.start()
-    print("[Scheduler] Изолированный Background-планировщик запущен в БОЕВОМ режиме.")
+
+
+if __name__ == "__main__":
+    start_scheduler()
