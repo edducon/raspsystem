@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import csv
+import json
 import re
+from io import StringIO
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import ScheduleSnapshot
@@ -83,8 +86,86 @@ class ScheduleSnapshotService:
 
     def delete_snapshot(self, snapshot_id: int) -> None:
         snapshot = self._get_snapshot_model(snapshot_id)
+        snapshot_count = self.db.scalar(select(func.count(ScheduleSnapshot.id)))
+        if snapshot.is_reference_for_retakes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя удалить активный снимок расписания.",
+            )
+        if snapshot_count is not None and snapshot_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя удалить единственный снимок расписания.",
+            )
         self.db.delete(snapshot)
         self.db.commit()
+
+    def export_json(self, snapshot_id: int) -> str:
+        snapshot = self._get_snapshot_model(snapshot_id)
+        payload = self._serialize_detail(snapshot).model_dump(mode="json", by_alias=True)
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    def export_csv(self, snapshot_id: int) -> str:
+        snapshot = self._get_snapshot_model(snapshot_id)
+        groups = {str(item.get("uuid") or ""): item for item in snapshot.groups or []}
+        subjects = {str(item.get("uuid") or ""): item for item in snapshot.subjects or []}
+        teachers = {str(item.get("uuid") or ""): item for item in snapshot.teachers or []}
+
+        output = StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "snapshot_id",
+                "snapshot_name",
+                "semester_label",
+                "captured_at",
+                "group_uuid",
+                "group_number",
+                "subject_uuid",
+                "subject_name",
+                "teacher_uuids",
+                "teacher_names",
+                "weekday",
+                "slot",
+                "subject_type",
+                "location",
+                "room",
+                "link",
+                "start_date",
+                "end_date",
+            ],
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+
+        for item in snapshot.schedule_items or []:
+            group_uuid = str(item.get("group_uuid") or "")
+            subject_uuid = str(item.get("subject_uuid") or "")
+            teacher_uuids = [str(uuid) for uuid in (item.get("teacher_uuids") or []) if uuid]
+            writer.writerow(
+                {
+                    "snapshot_id": snapshot.id,
+                    "snapshot_name": snapshot.name,
+                    "semester_label": snapshot.semester_label,
+                    "captured_at": snapshot.captured_at.isoformat() if snapshot.captured_at else "",
+                    "group_uuid": group_uuid,
+                    "group_number": str(groups.get(group_uuid, {}).get("number") or ""),
+                    "subject_uuid": subject_uuid,
+                    "subject_name": str(subjects.get(subject_uuid, {}).get("name") or ""),
+                    "teacher_uuids": "; ".join(teacher_uuids),
+                    "teacher_names": "; ".join(str(teachers.get(uuid, {}).get("full_name") or "") for uuid in teacher_uuids),
+                    "weekday": item.get("weekday") or "",
+                    "slot": item.get("slot") or "",
+                    "subject_type": item.get("subject_type") or "",
+                    "location": item.get("location") or "",
+                    "room": item.get("room") or "",
+                    "link": item.get("link") or "",
+                    "start_date": item.get("start_date") or "",
+                    "end_date": item.get("end_date") or "",
+                }
+            )
+
+        return output.getvalue()
 
     def _get_snapshot_model(self, snapshot_id: int) -> ScheduleSnapshot:
         snapshot = self.db.get(ScheduleSnapshot, snapshot_id)

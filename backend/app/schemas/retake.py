@@ -118,6 +118,14 @@ class RetakeSubjectOptionRead(BaseModel):
     name: str
 
 
+class RetakeTeacherOptionRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    uuid: str
+    full_name: str
+    department_ids: list[int] | None = None
+
+
 class RetakeFormContextRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -142,6 +150,10 @@ class RetakeFormContextRead(BaseModel):
     assigned_attempts: list[int] = Field(default_factory=list)
     next_attempt_number: int = 1
     available_main_teacher_uuids: list[str] = Field(default_factory=list)
+    main_teacher_options: list[RetakeTeacherOptionRead] = Field(default_factory=list)
+    auto_created_main_teacher_names: list[str] = Field(default_factory=list)
+    unresolved_main_teacher_names: list[str] = Field(default_factory=list)
+    main_teacher_department_required_names: list[str] = Field(default_factory=list)
     available_commission_teacher_uuids: list[str] = Field(default_factory=list)
     available_chairman_uuids: list[str] = Field(default_factory=list)
     available_meetings: list[RetakeMeetingRead] = Field(default_factory=list)
