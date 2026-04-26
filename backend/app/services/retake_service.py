@@ -490,13 +490,28 @@ class RetakeService:
         return retake.link
 
     def _serialize_meeting(self, meeting: RetakeMeeting) -> dict:
+        retakes = sorted(
+            meeting.retakes or [],
+            key=lambda item: (min(item.time_slots or [99]), item.group_uuid, item.attempt_number),
+        )
         return {
             "id": meeting.id,
             "department_id": meeting.department_id,
             "date": meeting.date,
             "link": meeting.link,
             "title": meeting.title,
-            "retake_count": len(meeting.retakes or []),
+            "retake_count": len(retakes),
+            "retakes": [
+                {
+                    "id": retake.id,
+                    "group_uuid": retake.group_uuid,
+                    "subject_uuid": retake.subject_uuid,
+                    "subject_name": self._resolve_subject_name_safe(retake.subject_uuid),
+                    "attempt_number": retake.attempt_number,
+                    "time_slots": list(retake.time_slots or []),
+                }
+                for retake in retakes
+            ],
         }
 
     def _list_meeting_candidates(
@@ -1135,7 +1150,8 @@ class RetakeService:
         ordered_rows = sorted(history_rows, key=lambda row: clean_subject_name(row.subject_name).casefold())
 
         for row in ordered_rows:
-            subject_name = str(row.subject_name or "").strip()
+            raw_subject_name = str(row.subject_name or "").strip()
+            subject_name = clean_subject_name(raw_subject_name)
             normalized_subject_name = normalize_for_compare(subject_name)
             if not subject_name or not normalized_subject_name or normalized_subject_name in seen_names:
                 continue

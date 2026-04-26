@@ -16,7 +16,8 @@ type RetakeTeacher = { teacherUuid: string; fullName: string; role: string };
 type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
-type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number };
+type RetakeMeetingItem = { id: string; groupUuid: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; timeSlots: number[] };
+type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number; retakes: RetakeMeetingItem[] };
 type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
 type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
@@ -77,6 +78,14 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       link: meeting?.link ?? null,
       title: meeting?.title ?? null,
       retakeCount: meeting?.retakeCount ?? meeting?.retake_count ?? 0,
+      retakes: (meeting?.retakes ?? []).map((retake: any) => ({
+        id: retake?.id ?? '',
+        groupUuid: retake?.groupUuid ?? retake?.group_uuid ?? '',
+        subjectUuid: retake?.subjectUuid ?? retake?.subject_uuid ?? '',
+        subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
+        attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
+        timeSlots: retake?.timeSlots ?? retake?.time_slots ?? [],
+      })),
     })),
     attemptRules: (raw?.attemptRules ?? raw?.attempt_rules ?? []).map((rule: any) => ({
       attemptNumber: rule?.attemptNumber ?? rule?.attempt_number ?? 1,
@@ -204,6 +213,9 @@ const formatShortName = (fullName?: string) => {
 const availableSubjects = computed(() =>
   [...formContext.value.availableSubjects]
     .map((subject) => ({ ...subject, name: cleanSubjectName(subject.name) }))
+    .filter((subject, index, subjects) => (
+      subjects.findIndex((candidate) => cleanSubjectName(candidate.name).toLowerCase() === cleanSubjectName(subject.name).toLowerCase()) === index
+    ))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
 );
 
@@ -252,6 +264,51 @@ const formatDate = (dateStr: string) => {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(dateStr));
 };
 
+const pluralizeRetakes = (count: number) => {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'пересдача';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'пересдачи';
+  return 'пересдач';
+};
+
+const formatMeetingOption = (meeting: RetakeMeeting) => {
+  const linkState = meeting.link ? 'ссылка указана' : 'ссылка не указана';
+  return `Встреча на ${formatDate(meeting.date)} · ${meeting.retakeCount} ${pluralizeRetakes(meeting.retakeCount)} · ${linkState}`;
+};
+
+const uniqueValues = (values: string[]) => [...new Set(values.filter(Boolean))];
+
+const groupLabel = (groupUuid: string) => (
+  props.groups.find((group) => group.uuid === groupUuid)?.number ?? 'Группа не найдена'
+);
+
+const formatSlotLabel = (slot: number) => `${slot} пара`;
+
+const meetingGroupLabels = (meeting: RetakeMeeting) => uniqueValues(
+  meeting.retakes.map((retake) => groupLabel(retake.groupUuid)),
+);
+
+const meetingSubjectLabels = (meeting: RetakeMeeting) => uniqueValues(
+  meeting.retakes.map((retake) => cleanSubjectName(retake.subjectName ?? 'Предмет не найден')),
+);
+
+const meetingSlotLabels = (meeting: RetakeMeeting) => uniqueValues(
+  meeting.retakes.flatMap((retake) => [...retake.timeSlots].sort().map(formatSlotLabel)),
+);
+
+const hasSameSubjectInMeeting = (meeting: RetakeMeeting) => {
+  const selectedName = selectedSubjectOption.value?.name ? cleanSubjectName(selectedSubjectOption.value.name).toLowerCase() : '';
+  if (!selectedName) return false;
+  return meeting.retakes.some((retake) => cleanSubjectName(retake.subjectName ?? '').toLowerCase() === selectedName);
+};
+
+const hasSameGroupInMeeting = (meeting: RetakeMeeting) => (
+  !!selectedGroupUuid.value && meeting.retakes.some((retake) => retake.groupUuid === selectedGroupUuid.value)
+);
+
+const isMeetingRecommended = (meeting: RetakeMeeting) => hasSameSubjectInMeeting(meeting) || hasSameGroupInMeeting(meeting);
+
 const showMainDropdown = ref(false);
 const showCommDropdown = ref(false);
 const showChairmanDropdown = ref(false);
@@ -272,10 +329,21 @@ const teachersByUuids = (uuids: string[]) => {
 
 const subjectBelongsToAnotherDept = computed(() => !!formContext.value.subjectBlockedReason);
 const availableMainTeachers = computed(() => teachersByUuids(formContext.value.availableMainTeacherUuids));
+const manualMainTeachers = computed(() => {
+  if (props.currentUser.role === 'ADMIN') return props.teachers;
+  const userDepartments = new Set(props.currentUser.departmentIds ?? []);
+  return props.teachers.filter((teacher) => (teacher.departmentIds ?? []).some((departmentId) => userDepartments.has(departmentId)));
+});
+const mainTeacherOptions = computed(() => (
+  availableMainTeachers.value.length > 0 ? availableMainTeachers.value : manualMainTeachers.value
+));
 const availableChairmen = computed(() => teachersByUuids(formContext.value.availableChairmanUuids));
 const availableCommissionTeachers = computed(() => teachersByUuids(formContext.value.availableCommissionTeacherUuids));
 const mainTeacherLacksDept = computed(() => formContext.value.mainTeacherLacksDept);
-const meetingOptions = computed(() => availableMeetings.value.length > 0 ? availableMeetings.value : formContext.value.availableMeetings);
+const meetingOptions = computed(() => (
+  selectedDate.value ? availableMeetings.value : []
+));
+const selectedMeeting = computed(() => meetingOptions.value.find((meeting) => meeting.id === selectedMeetingId.value) ?? null);
 const currentAttemptRule = computed(() => (
   formContext.value.attemptRules.find((rule) => rule.attemptNumber === attemptNumber.value)
   ?? { attemptNumber: attemptNumber.value, requiresChairman: attemptNumber.value > 1, minCommissionMembers: attemptNumber.value === 1 ? 1 : 0 }
@@ -283,7 +351,7 @@ const currentAttemptRule = computed(() => (
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
-  return query ? availableMainTeachers.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableMainTeachers.value;
+  return query ? mainTeacherOptions.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : mainTeacherOptions.value;
 });
 
 const displayChairmen = computed(() => {
@@ -322,6 +390,7 @@ const loadMeetingCandidates = async () => {
   }
 
   try {
+    availableMeetings.value = [];
     availableMeetings.value = await fetchBackendFromBrowser<RetakeMeeting[]>(
       props.backendApiUrl,
       `/retakes/meetings?${params.toString()}`,
@@ -420,10 +489,12 @@ const formContextErrorText = (error: unknown) => (
 
 const normalizeSelectedTeacherState = (context: RetakeFormContext) => {
   const allowedMain = new Set(context.availableMainTeacherUuids);
-  const nextMain = mainTeachers.value.filter((uuid) => allowedMain.has(uuid));
-  if (nextMain.length !== mainTeachers.value.length) {
-    mainTeachers.value = nextMain;
-    return true;
+  if (allowedMain.size > 0) {
+    const nextMain = mainTeachers.value.filter((uuid) => allowedMain.has(uuid));
+    if (nextMain.length !== mainTeachers.value.length) {
+      mainTeachers.value = nextMain;
+      return true;
+    }
   }
 
   const allowedCommission = new Set(context.availableCommissionTeacherUuids);
@@ -1053,8 +1124,8 @@ const saveMeetingLink = async () => {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                 <span>Попытка {{ r.attemptNumber }} — <span class="font-bold">{{ formatDate(r.date) }}</span></span>
-                <span v-if="r.link" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">ссылка указана</span>
-                <span v-else-if="r.meetingId" class="text-xs font-semibold text-amber-700 dark:text-amber-300">ссылка не указана</span>
+                <span v-if="r.link" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">онлайн-встреча: ссылка указана</span>
+                <span v-else-if="r.meetingId" class="text-xs font-semibold text-amber-700 dark:text-amber-300">онлайн-встреча: ссылка не указана</span>
               </div>
 
               <div class="flex items-center gap-2">
@@ -1071,7 +1142,7 @@ const saveMeetingLink = async () => {
                     @click="startEditMeetingLink(r)"
                     class="text-[var(--accent-strong)] hover:underline text-xs font-bold"
                 >
-                  Ссылка
+                  Ссылка встречи
                 </button>
                 <button
                     v-if="r.canDelete"
@@ -1087,20 +1158,25 @@ const saveMeetingLink = async () => {
 
           <div
               v-if="editingMeetingId"
-              class="mt-3 flex flex-col gap-2 rounded-2xl border border-amber-200/70 bg-white/70 p-3 dark:border-amber-500/10 dark:bg-black/20 sm:flex-row"
+              class="mt-3 rounded-2xl border border-amber-200/70 bg-white/70 p-3 dark:border-amber-500/10 dark:bg-black/20"
           >
-            <input
-                v-model="editingMeetingLink"
-                type="url"
-                placeholder="Ссылка на подключение"
-                class="min-w-0 flex-1 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
-            />
-            <button
-                @click="saveMeetingLink"
-                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-slate-900"
-            >
-              Сохранить
-            </button>
+            <label class="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">
+              Ссылка онлайн-встречи
+            </label>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input
+                  v-model="editingMeetingLink"
+                  type="url"
+                  placeholder="Вставьте ссылку для подключения"
+                  class="min-w-0 flex-1 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
+              />
+              <button
+                  @click="saveMeetingLink"
+                  class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-slate-900"
+              >
+                Сохранить ссылку
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1263,28 +1339,101 @@ const saveMeetingLink = async () => {
                 class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
             />
 
-            <input
-                v-else
-                v-model="onlineLink"
-                :disabled="!!selectedMeetingId"
-                type="url"
-                placeholder="Ссылка на подключение (можно добавить позже)"
-                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
-            />
-
-            <div v-if="retakeFormat === 'online' && meetingOptions.length > 0" class="mt-3">
+            <div v-else class="space-y-3">
               <label class="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                Общая ссылка
+                Онлайн-встреча
               </label>
-              <select
-                  v-model="selectedMeetingId"
-                  class="h-12 w-full rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-4 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
+
+              <label
+                  class="block cursor-pointer rounded-[22px] border p-4 transition-all"
+                  :class="!selectedMeetingId
+                    ? 'border-slate-900 bg-white dark:border-white dark:bg-white/[0.08]'
+                    : 'border-slate-200 bg-white/70 hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.03]'"
               >
-                <option value="">Создать отдельную встречу</option>
-                <option v-for="meeting in meetingOptions" :key="meeting.id" :value="meeting.id">
-                  {{ meeting.link || 'Ссылка будет добавлена позже' }} · {{ meeting.retakeCount }} пересд.
-                </option>
-              </select>
+                <div class="flex items-start gap-3">
+                  <input
+                      type="radio"
+                      v-model="selectedMeetingId"
+                      value=""
+                      class="mt-1 h-4 w-4 text-[var(--accent)]"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="text-sm font-black text-slate-900 dark:text-white">
+                      Новая отдельная онлайн-встреча
+                    </div>
+                    <div class="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Для этой пересдачи будет свое подключение. Ссылку можно вставить сейчас или добавить позже.
+                    </div>
+                    <input
+                        v-if="!selectedMeetingId"
+                        v-model="onlineLink"
+                        @click.stop
+                        type="url"
+                        placeholder="Вставьте ссылку, если она уже есть"
+                        class="mt-3 w-full h-11 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </label>
+
+              <div v-if="meetingOptions.length > 0" class="space-y-2">
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Уже созданные встречи на эту дату
+                </div>
+
+                <label
+                    v-for="meeting in meetingOptions"
+                    :key="meeting.id"
+                    class="block cursor-pointer rounded-[22px] border p-4 transition-all"
+                    :class="selectedMeetingId === meeting.id
+                      ? 'border-slate-900 bg-white dark:border-white dark:bg-white/[0.08]'
+                      : 'border-slate-200 bg-white/70 hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.03]'"
+                >
+                  <div class="flex items-start gap-3">
+                    <input
+                        type="radio"
+                        v-model="selectedMeetingId"
+                        :value="meeting.id"
+                        class="mt-1 h-4 w-4 text-[var(--accent)]"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-black text-slate-900 dark:text-white">
+                          Встреча на {{ formatDate(meeting.date) }}
+                        </span>
+                        <span
+                            v-if="isMeetingRecommended(meeting)"
+                            class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        >
+                          Подходит
+                        </span>
+                        <span
+                            class="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                            :class="meeting.link ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'"
+                        >
+                          {{ meeting.link ? 'Ссылка указана' : 'Ссылка не указана' }}
+                        </span>
+                      </div>
+
+                      <div class="mt-2 grid gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                        <div>Группы: {{ meetingGroupLabels(meeting).join(', ') || 'не указаны' }}</div>
+                        <div>Предметы: {{ meetingSubjectLabels(meeting).join(', ') || 'не указаны' }}</div>
+                        <div>Пары: {{ meetingSlotLabels(meeting).join(', ') || 'не указаны' }}</div>
+                      </div>
+
+                      <div class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {{ meeting.retakeCount }} {{ pluralizeRetakes(meeting.retakeCount) }} уже используют эту встречу.
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              </div>
+              <div
+                  v-else-if="selectedDate"
+                  class="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-xs font-medium text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400"
+              >
+                На выбранную дату еще нет других онлайн-встреч для этой кафедры.
+              </div>
             </div>
           </div>
 
@@ -1370,8 +1519,8 @@ const saveMeetingLink = async () => {
             <div class="relative">
               <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
                 Ведущий
-                <span v-if="availableMainTeachers.length === 0 && selectedSubject && !subjectBelongsToAnotherDept" class="text-red-500 normal-case tracking-normal">
-                  (Нет в истории)
+                <span v-if="availableMainTeachers.length === 0 && selectedSubject && !subjectBelongsToAnotherDept" class="text-amber-500 normal-case tracking-normal">
+                  (можно выбрать вручную)
                 </span>
               </label>
 
@@ -1393,8 +1542,7 @@ const saveMeetingLink = async () => {
                     :key="uuid"
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 text-xs font-semibold"
                 >
-                  {{ formatShortName(availableMainTeachers.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
-                  <X class="w-3 h-3 hover:text-blue-900 dark:hover:text-white cursor-pointer" @click.stop="removeMainTeacher(uuid)" />
+                  {{ formatShortName(mainTeacherOptions.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
                 </span>
               </div>
 

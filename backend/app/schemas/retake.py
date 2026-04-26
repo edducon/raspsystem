@@ -12,6 +12,17 @@ class RetakeTeacherRead(BaseModel):
     role: str
 
 
+class RetakeMeetingRetakeRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    id: str
+    group_uuid: str
+    subject_uuid: str
+    subject_name: str | None = None
+    attempt_number: int
+    time_slots: list[int] = Field(default_factory=list)
+
+
 class RetakeMeetingRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -21,6 +32,7 @@ class RetakeMeetingRead(BaseModel):
     link: str | None = None
     title: str | None = None
     retake_count: int = 0
+    retakes: list[RetakeMeetingRetakeRead] = Field(default_factory=list)
 
 
 class RetakeAttemptRuleRead(BaseModel):

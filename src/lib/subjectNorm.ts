@@ -1,21 +1,17 @@
-/**
- * Нормализация названий предметов для сравнения и fuzzy-поиска.
- */
+const GROUP_SUFFIX_WORD_RE = '(?:\\u043f\\u043e\\u0434\\u0433\\u0440\\u0443\\u043f\\u043f\\u0430|\\u0433\\u0440\\u0443\\u043f\\u043f\\u0430|\\u0433\\u0440\\u0443\\u043f\\u043f\\u044b|\\u0433\\u0440\\u0443\\u043f\\.?|\\u043f\\s*\\/?\\s*\\u0433|\\u043f\\s*\\.?\\s*\\u0433\\.?|\\u0433\\u0440\\.?|\\u0433\\b)';
+const GROUP_SUFFIX_BEFORE_NUMBER_RE = new RegExp(`\\s*\\(?\\s*${GROUP_SUFFIX_WORD_RE}\\s*\\d+\\s*\\)?`, 'gi');
+const GROUP_SUFFIX_AFTER_NUMBER_RE = new RegExp(`\\s*\\(?\\s*\\d+\\s*(?:-?\\s*\\u044f\\s*)?${GROUP_SUFFIX_WORD_RE}\\s*\\)?`, 'gi');
 
-/**
- * Очищает название предмета от суффиксов подгрупп, лишних символов и т.п.
- */
 export function cleanSubjectName(name: string): string {
   return name
-    .replace(/\s*(п\/г|гр\.|подгруппа)\s*\d+/gi, '')
+    .replace(GROUP_SUFFIX_AFTER_NUMBER_RE, '')
+    .replace(GROUP_SUFFIX_BEFORE_NUMBER_RE, '')
     .replace(/\s+\d+$/g, '')
     .replace(/[,;.]+$/, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-/**
- * Нормализует строку для сравнения: NFD, нижний регистр, схлопывает пробелы.
- */
 export function normalizeForCompare(name: string): string {
   return cleanSubjectName(name)
     .normalize('NFD')
@@ -24,9 +20,6 @@ export function normalizeForCompare(name: string): string {
     .trim();
 }
 
-/**
- * Расстояние Левенштейна между двумя строками.
- */
 export function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
@@ -45,10 +38,6 @@ export function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
-/**
- * Нечёткое сравнение двух названий предметов.
- * Порог по умолчанию — 15% от длины более длинной строки.
- */
 export function fuzzyMatch(a: string, b: string, threshold?: number): boolean {
   const na = normalizeForCompare(a);
   const nb = normalizeForCompare(b);
