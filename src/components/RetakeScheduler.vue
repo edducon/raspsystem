@@ -13,13 +13,15 @@ import {
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
 type RetakeTeacher = { teacherUuid: string; fullName: string; role: string };
-type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
+type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; controlType: ControlType; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
 type TeacherOption = { uuid: string; fullName: string; departmentIds: number[] | null };
 type RetakeMeetingItem = { id: string; groupUuid: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; timeSlots: number[] };
 type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number; retakes: RetakeMeetingItem[] };
 type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
+type ControlType = 'unspecified' | 'pass' | 'differentiated_pass' | 'exam';
+type SubjectControl = { controlType: ControlType; source: string };
 type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
   groupHistory: GroupHistoryEntry[];
@@ -37,6 +39,7 @@ type RetakeFormContext = {
   availableChairmanUuids: string[];
   availableMeetings: RetakeMeeting[];
   attemptRules: RetakeAttemptRule[];
+  subjectControl: SubjectControl;
   departmentId: number | null;
   mainTeacherLacksDept: boolean;
 };
@@ -52,6 +55,7 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       subjectUuid: retake?.subjectUuid ?? retake?.subject_uuid ?? '',
       subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
       attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
+      controlType: retake?.controlType ?? retake?.control_type ?? 'unspecified',
       date: retake?.date ?? '',
       timeSlots: retake?.timeSlots ?? retake?.time_slots ?? [],
       roomUuid: retake?.roomUuid ?? retake?.room_uuid ?? null,
@@ -105,6 +109,10 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       requiresChairman: rule?.requiresChairman ?? rule?.requires_chairman ?? false,
       minCommissionMembers: rule?.minCommissionMembers ?? rule?.min_commission_members ?? 0,
     })),
+    subjectControl: {
+      controlType: raw?.subjectControl?.controlType ?? raw?.subject_control?.control_type ?? 'unspecified',
+      source: raw?.subjectControl?.source ?? raw?.subject_control?.source ?? 'default',
+    },
     departmentId: raw?.departmentId ?? raw?.department_id ?? null,
     mainTeacherLacksDept: raw?.mainTeacherLacksDept ?? raw?.main_teacher_lacks_dept ?? false,
   };
@@ -135,6 +143,7 @@ const editingMeetingId = ref<string | null>(null);
 const editingMeetingLink = ref('');
 const editingRetakeId = ref<string | null>(null);
 const attemptNumber = ref(1);
+const controlType = ref<ControlType>('unspecified');
 
 const groupSearchQuery = ref('');
 const selectedGroupUuid = ref('');
@@ -162,6 +171,7 @@ const createEmptyFormContext = (): RetakeFormContext => ({
     { attemptNumber: 2, requiresChairman: true, minCommissionMembers: 0 },
     { attemptNumber: 3, requiresChairman: true, minCommissionMembers: 0 },
   ],
+  subjectControl: { controlType: 'unspecified', source: 'default' },
   departmentId: null,
   mainTeacherLacksDept: false,
 });
@@ -375,6 +385,23 @@ const currentAttemptRule = computed(() => (
   formContext.value.attemptRules.find((rule) => rule.attemptNumber === attemptNumber.value)
   ?? { attemptNumber: attemptNumber.value, requiresChairman: attemptNumber.value > 1, minCommissionMembers: attemptNumber.value === 1 ? 1 : 0 }
 ));
+const controlTypeOptions: Array<{ value: ControlType; label: string }> = [
+  { value: 'unspecified', label: 'Не указано' },
+  { value: 'pass', label: 'Зачет' },
+  { value: 'differentiated_pass', label: 'Дифференцированный зачет' },
+  { value: 'exam', label: 'Экзамен' },
+];
+const controlTypeLabel = (value: ControlType | string) => (
+  controlTypeOptions.find((option) => option.value === value)?.label ?? 'Не указано'
+);
+const hasExamOnSelectedDate = computed(() => {
+  if (!selectedDate.value || controlType.value !== 'exam') return false;
+  return existingGroupRetakes.value.some((retake) => (
+    retake.id !== editingRetakeId.value
+    && retake.date === selectedDate.value
+    && retake.controlType === 'exam'
+  ));
+});
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
@@ -457,6 +484,7 @@ const resetSubjectContext = () => {
     availableChairmanUuids: [],
     availableMeetings: [],
     attemptRules: formContext.value.attemptRules,
+    subjectControl: { controlType: 'unspecified', source: 'default' },
     departmentId: null,
     mainTeacherLacksDept: false,
   };
@@ -492,6 +520,7 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableChairmanUuids: [],
       availableMeetings: [],
       attemptRules: nextContext.attemptRules,
+      subjectControl: nextContext.subjectControl,
       departmentId: null,
       mainTeacherLacksDept: false,
     };
@@ -505,6 +534,7 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableChairmanUuids: nextContext.availableChairmanUuids,
       availableMeetings: nextContext.availableMeetings,
       attemptRules: nextContext.attemptRules,
+      subjectControl: nextContext.subjectControl,
       departmentId: nextContext.departmentId,
       mainTeacherLacksDept: nextContext.mainTeacherLacksDept,
       mainTeacherOptions: nextContext.mainTeacherOptions,
@@ -688,6 +718,7 @@ const loadFormContext = async (scope: FormContextScope = 'full') => {
     }
 
     if ((scope === 'subject' || scope === 'full') && selectedSubject.value && !editingRetakeId.value) {
+      controlType.value = formContext.value.subjectControl.controlType;
       applyAutoMainTeachers(formContext.value, scope === 'subject');
     }
 
@@ -839,6 +870,7 @@ const resetRetakeDraft = () => {
   roomUuid.value = '';
   onlineLink.value = '';
   selectedMeetingId.value = '';
+  controlType.value = formContext.value.subjectControl.controlType;
   chairmanTeacher.value = null;
   commissionTeachers.value = [];
 };
@@ -858,6 +890,7 @@ const startEditRetake = async (retake: GroupRetake) => {
   selectedDate.value = retake.date;
   selectedSlots.value = [...retake.timeSlots].sort();
   attemptNumber.value = retake.attemptNumber;
+  controlType.value = retake.controlType;
   mainTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'MAIN').map((teacher) => teacher.teacherUuid);
   commissionTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'COMMISSION').map((teacher) => teacher.teacherUuid);
   chairmanTeacher.value = retake.teachers.find((teacher) => teacher.role === 'CHAIRMAN')?.teacherUuid ?? null;
@@ -883,6 +916,7 @@ const submitRetake = async () => {
   if (commissionTeachers.value.length < currentAttemptRule.value.minCommissionMembers) {
     return addToast(`Для выбранной попытки нужно выбрать членов комиссии: минимум ${currentAttemptRule.value.minCommissionMembers}.`, 'error');
   }
+  if (hasExamOnSelectedDate.value) return addToast('У этой группы уже назначен экзамен на выбранную дату.', 'error');
   if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для очного формата.', 'error');
   if (isAttemptUnavailable(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
 
@@ -909,6 +943,7 @@ const submitRetake = async () => {
           meetingId: retakeFormat.value === 'online' && selectedMeetingId.value ? selectedMeetingId.value : undefined,
           isOnline: retakeFormat.value === 'online',
           attemptNumber: attemptNumber.value,
+          controlType: controlType.value,
           mainTeacherUuids: mainTeachers.value,
           commissionTeacherUuids: commissionTeachers.value,
           chairmanUuid: chairmanTeacher.value || undefined,
@@ -1186,6 +1221,12 @@ const saveMeetingLink = async () => {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                 <span>Попытка {{ r.attemptNumber }} — <span class="font-bold">{{ formatDate(r.date) }}</span></span>
+                <span
+                    v-if="r.controlType !== 'unspecified'"
+                    class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-white/10 dark:text-slate-200"
+                >
+                  {{ controlTypeLabel(r.controlType) }}
+                </span>
                 <span v-if="r.link" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">онлайн-встреча: ссылка указана</span>
                 <span v-else-if="r.meetingId" class="text-xs font-semibold text-amber-700 dark:text-amber-300">онлайн-встреча: ссылка не указана</span>
               </div>
@@ -1362,7 +1403,7 @@ const saveMeetingLink = async () => {
       </div>
 
       <div :class="{ 'hidden md:block': sectionsCollapsed.format }">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-5 sm:p-6 bg-slate-50/80 dark:bg-black/10 rounded-[24px] border border-slate-100 dark:border-white/10">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 p-5 sm:p-6 bg-slate-50/80 dark:bg-black/10 rounded-[24px] border border-slate-100 dark:border-white/10">
           <!-- Format -->
           <div>
             <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
@@ -1497,6 +1538,51 @@ const saveMeetingLink = async () => {
                 На выбранную дату еще нет других онлайн-встреч для этой кафедры.
               </div>
             </div>
+          </div>
+
+          <!-- Control type -->
+          <div>
+            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
+              Тип контроля
+            </h4>
+
+            <div class="flex flex-col gap-2">
+              <label
+                  v-for="option in controlTypeOptions"
+                  :key="option.value"
+                  class="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15"
+                  :class="controlType === option.value ? 'border-slate-900 dark:border-white' : ''"
+              >
+                <input
+                    type="radio"
+                    v-model="controlType"
+                    :value="option.value"
+                    class="h-4 w-4 text-[var(--accent)]"
+                />
+                <span class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {{ option.label }}
+                </span>
+              </label>
+            </div>
+
+            <p
+                v-if="formContext.subjectControl.source === 'exact'"
+                class="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+            >
+              Подставлено из прошлых назначений этой группы.
+            </p>
+            <p
+                v-else-if="formContext.subjectControl.source === 'group_family'"
+                class="mt-3 text-xs font-semibold text-sky-700 dark:text-sky-300"
+            >
+              Подставлено по похожей группе этого направления.
+            </p>
+            <p
+                v-if="hasExamOnSelectedDate"
+                class="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+            >
+              На выбранную дату у этой группы уже есть экзамен.
+            </p>
           </div>
 
           <!-- Attempt -->

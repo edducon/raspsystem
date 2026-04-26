@@ -40,7 +40,7 @@ class RaspyxService:
             raise RuntimeError(f"Raspyx request failed with {exc.code}: {detail}") from exc
         except (error.URLError, TimeoutError, socket.timeout) as exc:
             print(f"[RaspyxService] API Connection Error / Timeout: {exc}")
-            return {"success": False, "result": [], "response": []}
+            raise RuntimeError(f"Raspyx connection error: {exc}") from exc
 
     def _cached_get(self, endpoint: str) -> object:
         cached = self.__class__._response_cache.get(endpoint)

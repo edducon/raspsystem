@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import PastSemester, Retake, RetakeAttemptRule, RetakeLeadTeacher, RetakeMeeting, RetakeTeacher, TeacherLocal, User
+from app.models import PastSemester, Retake, RetakeAttemptRule, RetakeLeadTeacher, RetakeMeeting, RetakeSubjectControl, RetakeTeacher, TeacherLocal, User
 from app.schemas.retake import MergedDayScheduleRequest, RetakeCreateRequest, RetakeFormContextRequest, RetakeUpdateRequest
 from app.services.raspyx_service import RaspyxService
 from app.services.reference_schedule_service import ReferenceScheduleService
@@ -17,6 +17,7 @@ from app.services.subject_matching import clean_subject_name, fuzzy_match, norma
 
 GROUP_NAME_NORMALIZER_RE = re.compile(r"[\s\u00A0]+")
 TEACHER_NAME_NORMALIZER_RE = re.compile(r"[\s\u00A0]+")
+CONTROL_TYPES = {"unspecified", "pass", "differentiated_pass", "exam"}
 
 
 class RetakeService:
@@ -67,6 +68,7 @@ class RetakeService:
         subject_blocked_reason = None
         assigned_attempts: list[int] = []
         next_attempt_number = 1
+        subject_control = {"control_type": "unspecified", "source": "default"}
         available_main_teacher_uuids: list[str] = []
         main_teacher_options: list[dict] = []
         auto_created_main_teacher_names: list[str] = []
@@ -87,11 +89,17 @@ class RetakeService:
                 }
             )
             next_attempt_number = next((value for value in (1, 2, 3) if value not in assigned_attempts), 3)
+            subject_control = self._resolve_subject_control(
+                group_uuid=payload.group_uuid,
+                group_number=payload.group_number,
+                subject_name=selected_subject_name,
+            )
 
             if subject_blocked_reason is None:
                 main_teacher_context = self._available_main_teacher_context(
                     user=user,
                     history_rows=history_rows,
+                    group_uuid=payload.group_uuid,
                     subject_uuid=payload.subject_uuid,
                 )
                 available_main_teacher_uuids = main_teacher_context["available_main_teacher_uuids"]
@@ -132,6 +140,7 @@ class RetakeService:
             "available_chairman_uuids": available_chairman_uuids,
             "available_meetings": available_meetings,
             "attempt_rules": self.list_attempt_rules(),
+            "subject_control": subject_control,
             "department_id": department_id,
             "main_teacher_lacks_dept": main_teacher_lacks_dept,
         }
@@ -157,6 +166,7 @@ class RetakeService:
                 "room": retake.room_uuid,
                 "link": self._effective_link(retake),
                 "attempt_number": retake.attempt_number,
+                "control_type": retake.control_type or "unspecified",
                 "my_role": role,
             }
             for retake, role in rows
@@ -171,6 +181,7 @@ class RetakeService:
         self._ensure_subject_access(user=user, data=data)
         self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
         self._ensure_attempt_is_available(data)
+        self._ensure_exam_day_is_available(data)
         meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
 
         retake = Retake(
@@ -183,6 +194,7 @@ class RetakeService:
             meeting_id=meeting.id if meeting is not None else None,
             department_id=department_id,
             attempt_number=data.attempt_number,
+            control_type=data.control_type,
             created_by=str(user.id),
         )
         self.db.add(retake)
@@ -194,6 +206,7 @@ class RetakeService:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
         if data.chairman_uuid:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=data.chairman_uuid, role="CHAIRMAN"))
+        self._remember_subject_control(data=data, user=user)
 
         self.db.commit()
 
@@ -220,6 +233,7 @@ class RetakeService:
         self._ensure_subject_access(user=user, data=data)
         self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
         self._ensure_attempt_is_available(data, exclude_retake_id=retake_id)
+        self._ensure_exam_day_is_available(data, exclude_retake_id=retake_id)
         meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
 
         retake.group_uuid = data.group_uuid
@@ -231,6 +245,7 @@ class RetakeService:
         retake.meeting_id = meeting.id if meeting is not None else None
         retake.department_id = department_id
         retake.attempt_number = data.attempt_number
+        retake.control_type = data.control_type
 
         self.db.execute(delete(RetakeLeadTeacher).where(RetakeLeadTeacher.retake_id == retake_id))
         self.db.execute(delete(RetakeTeacher).where(RetakeTeacher.retake_id == retake_id))
@@ -241,6 +256,7 @@ class RetakeService:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
         if data.chairman_uuid:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=data.chairman_uuid, role="CHAIRMAN"))
+        self._remember_subject_control(data=data, user=user)
 
         self.db.commit()
 
@@ -483,6 +499,7 @@ class RetakeService:
             "meeting_id": retake.meeting_id,
             "department_id": retake.department_id,
             "attempt_number": retake.attempt_number,
+            "control_type": retake.control_type or "unspecified",
             "created_by": retake.created_by,
             "created_at": retake.created_at,
             "can_delete": self._can_delete(retake, viewer),
@@ -602,6 +619,8 @@ class RetakeService:
     def _validate_create_payload(self, data: RetakeCreateRequest) -> None:
         if data.attempt_number not in {1, 2, 3}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Номер попытки должен быть от 1 до 3.")
+        if data.control_type not in CONTROL_TYPES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный тип контроля.")
         rule = self._attempt_rule_for(data.attempt_number)
         if rule.requires_chairman and not data.chairman_uuid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для выбранной попытки нужно выбрать председателя комиссии.")
@@ -709,6 +728,93 @@ class RetakeService:
                 continue
             if normalize_for_compare(self._resolve_subject_name_safe(retake.subject_uuid)) == normalize_for_compare(selected_subject_name):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Эта попытка уже назначена.")
+
+    def _ensure_exam_day_is_available(self, data: RetakeCreateRequest, exclude_retake_id: str | None = None) -> None:
+        if data.control_type != "exam":
+            return
+        candidates = self.db.scalars(
+            select(Retake).where(
+                Retake.group_uuid == data.group_uuid,
+                Retake.date == data.date,
+                Retake.control_type == "exam",
+            )
+        ).all()
+        for retake in candidates:
+            if exclude_retake_id is not None and retake.id == exclude_retake_id:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="У этой группы уже назначен экзамен на выбранную дату.",
+            )
+
+    def _subject_key(self, subject_name: str) -> str:
+        return normalize_for_compare(subject_name)
+
+    def _group_family_key(self, group_number: str) -> str | None:
+        normalized = str(group_number or "").strip()
+        if "-" not in normalized:
+            return None
+        return normalized.split("-", 1)[1].strip() or None
+
+    def _resolve_subject_control(self, group_uuid: str, group_number: str, subject_name: str) -> dict:
+        subject_key = self._subject_key(subject_name)
+        if not subject_key:
+            return {"control_type": "unspecified", "source": "default"}
+
+        exact = self.db.scalar(
+            select(RetakeSubjectControl).where(
+                RetakeSubjectControl.group_uuid == group_uuid,
+                RetakeSubjectControl.subject_key == subject_key,
+            )
+        )
+        if exact is not None:
+            return {"control_type": exact.control_type, "source": "exact"}
+
+        family_key = self._group_family_key(group_number)
+        if family_key:
+            family_match = self.db.scalar(
+                select(RetakeSubjectControl)
+                .where(
+                    RetakeSubjectControl.group_family_key == family_key,
+                    RetakeSubjectControl.subject_key == subject_key,
+                )
+                .order_by(RetakeSubjectControl.updated_at.desc(), RetakeSubjectControl.id.desc())
+                .limit(1)
+            )
+            if family_match is not None:
+                return {"control_type": family_match.control_type, "source": "group_family"}
+
+        return {"control_type": "unspecified", "source": "default"}
+
+    def _remember_subject_control(self, data: RetakeCreateRequest, user: User) -> None:
+        if data.control_type not in CONTROL_TYPES:
+            return
+        subject_name = self._resolve_subject_name(data.subject_uuid)
+        subject_key = self._subject_key(subject_name)
+        if not subject_key:
+            return
+
+        existing = self.db.scalar(
+            select(RetakeSubjectControl).where(
+                RetakeSubjectControl.group_uuid == data.group_uuid,
+                RetakeSubjectControl.subject_key == subject_key,
+            )
+        )
+        if existing is None:
+            existing = RetakeSubjectControl(
+                group_uuid=data.group_uuid,
+                group_number=data.group_number,
+                group_family_key=self._group_family_key(data.group_number),
+                subject_key=subject_key,
+                subject_name=subject_name,
+            )
+            self.db.add(existing)
+
+        existing.group_number = data.group_number
+        existing.group_family_key = self._group_family_key(data.group_number)
+        existing.subject_name = subject_name
+        existing.control_type = data.control_type
+        existing.updated_by = str(user.id)
 
     def _ensure_subject_access(self, user: User, data: RetakeCreateRequest) -> None:
         error_message = self._get_subject_access_error(user=user, group_number=data.group_number, subject_uuid=data.subject_uuid)

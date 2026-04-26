@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue';
-import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
+import { BackendApiError, fetchBackendBlobFromBrowser, fetchBackendFromBrowser } from '../lib/backend-api';
 
 type UserRole = 'ADMIN' | 'EMPLOYEE' | 'TEACHER';
 type StatusKind = 'success' | 'error';
@@ -16,6 +16,7 @@ type PastSemesterStatus = { isLoaded: boolean; importedRecords: number; uniqueGr
 type AuditLogItem = { id: number; createdAt: string; actorUserId: number | null; action: string; targetType: string | null; targetId: string | null; status: string; ipAddress: string | null; userAgent: string | null; details: Record<string, unknown> | null };
 type AuditLogListResponse = { items: AuditLogItem[]; total: number; limit: number; offset: number };
 type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
+type ConfirmTone = 'default' | 'primary' | 'danger';
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   'auth.login': 'Вход в систему',
@@ -149,6 +150,15 @@ const hasAuditFilters = computed(() => Boolean(auditFilters.query.trim() || audi
 // Account creation modal for existing teacher
 const showAccountModal = ref(false);
 const accountTarget = reactive({ uuid: '', fullName: '', username: '', password: '', role: 'TEACHER' as UserRole, department_id: '' });
+const confirmDialog = reactive({
+  open: false,
+  title: '',
+  message: '',
+  confirmLabel: 'Подтвердить',
+  cancelLabel: 'Отмена',
+  tone: 'default' as ConfirmTone,
+});
+let confirmResolver: ((confirmed: boolean) => void) | null = null;
 
 const pastSemesterFileInput = ref<HTMLInputElement | null>(null);
 
@@ -307,6 +317,34 @@ function openAccountModal(teacher: TeacherDirectoryItem) {
   accountTarget.role = 'TEACHER';
   accountTarget.department_id = teacher.departmentIds.length > 0 ? String(teacher.departmentIds[0]) : '';
   showAccountModal.value = true;
+}
+
+function askConfirmation(options: {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: ConfirmTone;
+}): Promise<boolean> {
+  if (confirmResolver) {
+    confirmResolver(false);
+  }
+  confirmDialog.title = options.title;
+  confirmDialog.message = options.message;
+  confirmDialog.confirmLabel = options.confirmLabel ?? 'Подтвердить';
+  confirmDialog.cancelLabel = options.cancelLabel ?? 'Отмена';
+  confirmDialog.tone = options.tone ?? 'default';
+  confirmDialog.open = true;
+
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+
+function closeConfirmation(confirmed: boolean) {
+  confirmDialog.open = false;
+  confirmResolver?.(confirmed);
+  confirmResolver = null;
 }
 
 // --- API calls ---
@@ -597,7 +635,13 @@ async function handlePastSemesterFile(event: Event) {
 }
 
 async function syncCurrentSchedule() {
-  if (!window.confirm('Скачать текущее расписание из внешнего API (Raspyx)? Это может занять около минуты. Расписание будет установлено как активный семестр.')) {
+  const confirmed = await askConfirmation({
+    title: 'Скачать текущий семестр?',
+    message: 'Система загрузит расписание из Raspyx и установит новый снимок как активный эталон для пересдач. Это может занять около минуты.',
+    confirmLabel: 'Скачать',
+    tone: 'primary',
+  });
+  if (!confirmed) {
     return;
   }
 
@@ -616,11 +660,17 @@ async function syncCurrentSchedule() {
   }
 }
 
-async function setSnapshotAsReference(rawIdStr: string) {
-  const snapshotId = Number(rawIdStr.replace('snapshot-', ''));
+async function setSnapshotAsReference(rawId: string | number) {
+  const snapshotId = typeof rawId === 'number' ? rawId : Number(rawId.replace('snapshot-', ''));
   if (isNaN(snapshotId)) return;
 
-  if (!window.confirm('Назначить этот семестр текущим эталоном для пересдач? Все новые пересдачи будут использовать его расписание.')) {
+  const confirmed = await askConfirmation({
+    title: 'Сделать снимок эталоном?',
+    message: 'Все новые пересдачи будут использовать группы, предметы и расписание из выбранного снимка.',
+    confirmLabel: 'Сделать эталоном',
+    tone: 'primary',
+  });
+  if (!confirmed) {
     return;
   }
 
@@ -653,14 +703,10 @@ async function downloadSnapshot(snapshotId: number, format: 'json' | 'csv') {
   const busyKey = `${snapshotId}-${format}`;
   busy.downloadSnapshot = busyKey;
   try {
-    const response = await fetch(`${props.backendApiUrl}/schedule-snapshots/${snapshotId}/export.${format}`, {
-      credentials: 'include',
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.detail || 'Не удалось скачать снимок.');
-    }
-    const blob = await response.blob();
+    const blob = await fetchBackendBlobFromBrowser(
+      props.backendApiUrl,
+      `/schedule-snapshots/${snapshotId}/export.${format}`,
+    );
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -670,14 +716,20 @@ async function downloadSnapshot(snapshotId: number, format: 'json' | 'csv') {
     link.remove();
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    setStatus('error', error instanceof Error ? error.message : 'Не удалось скачать снимок.');
+    setStatus('error', errorText(error, 'Не удалось скачать снимок.'));
   } finally {
     busy.downloadSnapshot = '';
   }
 }
 
 async function deleteSnapshot(snapshotId: number) {
-  if (!window.confirm('Удалить снимок расписания? Это действие нельзя отменить.')) return;
+  const confirmed = await askConfirmation({
+    title: 'Удалить снимок?',
+    message: 'Снимок расписания будет удалён из архива. Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+    tone: 'danger',
+  });
+  if (!confirmed) return;
   try {
     await fetchBackendFromBrowser(props.backendApiUrl, `/schedule-snapshots/${snapshotId}`, { method: 'DELETE' });
     if (selectedSnapshot.value?.id === snapshotId) selectedSnapshot.value = null;
@@ -712,7 +764,13 @@ const archiveItems = computed<ArchiveItem[]>(() => {
 });
 
 async function deleteEntity(path: string, msg: string) {
-  if (!window.confirm('Вы уверены?')) return;
+  const confirmed = await askConfirmation({
+    title: 'Удалить запись?',
+    message: 'Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+    tone: 'danger',
+  });
+  if (!confirmed) return;
   try { await fetchBackendFromBrowser(props.backendApiUrl, path, { method: 'DELETE' }); setStatus('success', msg); await reloadAll(); }
   catch (error) { setStatus('error', errorText(error, 'Ошибка при удалении.')); }
 }
@@ -1067,6 +1125,46 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- ==================== CONFIRMATION MODAL ==================== -->
+    <div v-if="confirmDialog.open" class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm p-4">
+      <div class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-slate-900">
+        <div
+            class="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-black"
+            :class="confirmDialog.tone === 'danger'
+              ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'
+              : confirmDialog.tone === 'primary'
+                ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
+                : 'bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200'"
+        >
+          !
+        </div>
+        <h3 class="text-xl font-black text-slate-950 dark:text-white">{{ confirmDialog.title }}</h3>
+        <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ confirmDialog.message }}</p>
+
+        <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+              type="button"
+              @click="closeConfirmation(false)"
+              class="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
+          >
+            {{ confirmDialog.cancelLabel }}
+          </button>
+          <button
+              type="button"
+              @click="closeConfirmation(true)"
+              class="h-11 rounded-2xl px-5 text-sm font-black transition-colors"
+              :class="confirmDialog.tone === 'danger'
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : confirmDialog.tone === 'primary'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200'"
+          >
+            {{ confirmDialog.confirmLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== SETTINGS TAB ==================== -->
     <div v-if="activeTab === 'settings'" class="space-y-6">
       <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
@@ -1149,7 +1247,7 @@ onMounted(() => {
           <div>
             <h2 class="text-xl font-black dark:text-white">Снимки расписания</h2>
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">
-              Архив расписаний из Raspyx. Снимки можно просматривать, скачивать в JSON/CSV и назначать эталоном для пересдач.
+              Архив расписаний. Снимки можно просматривать, скачивать в JSON/CSV и назначать эталоном для пересдач.
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
