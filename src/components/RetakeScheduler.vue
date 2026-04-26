@@ -13,12 +13,15 @@ import {
 
 type GroupHistoryEntry = { subjectName: string; teacherNames: string[] };
 type RetakeTeacher = { teacherUuid: string; fullName: string; role: string };
-type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
+type GroupRetake = { id: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; controlType: ControlType; date: string; timeSlots: number[]; roomUuid: string | null; link: string | null; meetingId: string | null; departmentId: number | null; createdBy: string | null; canDelete: boolean; teachers: RetakeTeacher[] };
 type MergedDaySchedule = Record<string, { reason: string; details: { subject: string; type: string; location: string } } | null>;
 type RetakeSubjectOption = { uuid: string; name: string };
+type TeacherOption = { uuid: string; fullName: string; departmentIds: number[] | null };
 type RetakeMeetingItem = { id: string; groupUuid: string; subjectUuid: string; subjectName: string | null; attemptNumber: number; timeSlots: number[] };
 type RetakeMeeting = { id: string; departmentId: number | null; date: string; link: string | null; title: string | null; retakeCount: number; retakes: RetakeMeetingItem[] };
 type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
+type ControlType = 'unspecified' | 'pass' | 'differentiated_pass' | 'exam';
+type SubjectControl = { controlType: ControlType; source: string };
 type FormContextScope = 'idle' | 'group' | 'subject' | 'teachers' | 'full';
 type RetakeFormContext = {
   groupHistory: GroupHistoryEntry[];
@@ -28,10 +31,15 @@ type RetakeFormContext = {
   assignedAttempts: number[];
   nextAttemptNumber: number;
   availableMainTeacherUuids: string[];
+  mainTeacherOptions: TeacherOption[];
+  autoCreatedMainTeacherNames: string[];
+  unresolvedMainTeacherNames: string[];
+  mainTeacherDepartmentRequiredNames: string[];
   availableCommissionTeacherUuids: string[];
   availableChairmanUuids: string[];
   availableMeetings: RetakeMeeting[];
   attemptRules: RetakeAttemptRule[];
+  subjectControl: SubjectControl;
   departmentId: number | null;
   mainTeacherLacksDept: boolean;
 };
@@ -47,6 +55,7 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       subjectUuid: retake?.subjectUuid ?? retake?.subject_uuid ?? '',
       subjectName: retake?.subjectName ?? retake?.subject_name ?? null,
       attemptNumber: retake?.attemptNumber ?? retake?.attempt_number ?? 1,
+      controlType: retake?.controlType ?? retake?.control_type ?? 'unspecified',
       date: retake?.date ?? '',
       timeSlots: retake?.timeSlots ?? retake?.time_slots ?? [],
       roomUuid: retake?.roomUuid ?? retake?.room_uuid ?? null,
@@ -69,6 +78,14 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
     assignedAttempts: raw?.assignedAttempts ?? raw?.assigned_attempts ?? [],
     nextAttemptNumber: raw?.nextAttemptNumber ?? raw?.next_attempt_number ?? 1,
     availableMainTeacherUuids: raw?.availableMainTeacherUuids ?? raw?.available_main_teacher_uuids ?? [],
+    mainTeacherOptions: (raw?.mainTeacherOptions ?? raw?.main_teacher_options ?? []).map((teacher: any) => ({
+      uuid: teacher?.uuid ?? '',
+      fullName: teacher?.fullName ?? teacher?.full_name ?? '',
+      departmentIds: teacher?.departmentIds ?? teacher?.department_ids ?? null,
+    })),
+    autoCreatedMainTeacherNames: raw?.autoCreatedMainTeacherNames ?? raw?.auto_created_main_teacher_names ?? [],
+    unresolvedMainTeacherNames: raw?.unresolvedMainTeacherNames ?? raw?.unresolved_main_teacher_names ?? [],
+    mainTeacherDepartmentRequiredNames: raw?.mainTeacherDepartmentRequiredNames ?? raw?.main_teacher_department_required_names ?? [],
     availableCommissionTeacherUuids: raw?.availableCommissionTeacherUuids ?? raw?.available_commission_teacher_uuids ?? [],
     availableChairmanUuids: raw?.availableChairmanUuids ?? raw?.available_chairman_uuids ?? [],
     availableMeetings: (raw?.availableMeetings ?? raw?.available_meetings ?? []).map((meeting: any) => ({
@@ -92,6 +109,10 @@ function normalizeRetakeFormContext(raw: any): RetakeFormContext {
       requiresChairman: rule?.requiresChairman ?? rule?.requires_chairman ?? false,
       minCommissionMembers: rule?.minCommissionMembers ?? rule?.min_commission_members ?? 0,
     })),
+    subjectControl: {
+      controlType: raw?.subjectControl?.controlType ?? raw?.subject_control?.control_type ?? 'unspecified',
+      source: raw?.subjectControl?.source ?? raw?.subject_control?.source ?? 'default',
+    },
     departmentId: raw?.departmentId ?? raw?.department_id ?? null,
     mainTeacherLacksDept: raw?.mainTeacherLacksDept ?? raw?.main_teacher_lacks_dept ?? false,
   };
@@ -101,7 +122,7 @@ const props = defineProps<{
   backendApiUrl: string;
   groups: { uuid: string; number: string }[];
   subjects: { uuid: string; name: string }[];
-  teachers: { uuid: string; fullName: string; departmentIds: number[] | null }[];
+  teachers: TeacherOption[];
   currentUser: { id: string; role: string; departmentIds: number[] | null };
 }>();
 
@@ -122,6 +143,7 @@ const editingMeetingId = ref<string | null>(null);
 const editingMeetingLink = ref('');
 const editingRetakeId = ref<string | null>(null);
 const attemptNumber = ref(1);
+const controlType = ref<ControlType>('unspecified');
 
 const groupSearchQuery = ref('');
 const selectedGroupUuid = ref('');
@@ -137,6 +159,10 @@ const createEmptyFormContext = (): RetakeFormContext => ({
   assignedAttempts: [],
   nextAttemptNumber: 1,
   availableMainTeacherUuids: [],
+  mainTeacherOptions: [],
+  autoCreatedMainTeacherNames: [],
+  unresolvedMainTeacherNames: [],
+  mainTeacherDepartmentRequiredNames: [],
   availableCommissionTeacherUuids: [],
   availableChairmanUuids: [],
   availableMeetings: [],
@@ -145,6 +171,7 @@ const createEmptyFormContext = (): RetakeFormContext => ({
     { attemptNumber: 2, requiresChairman: true, minCommissionMembers: 0 },
     { attemptNumber: 3, requiresChairman: true, minCommissionMembers: 0 },
   ],
+  subjectControl: { controlType: 'unspecified', source: 'default' },
   departmentId: null,
   mainTeacherLacksDept: false,
 });
@@ -155,6 +182,7 @@ const formContextError = ref<string | null>(null);
 const hasLoadedFormContext = ref(false);
 const formContextLoadScope = ref<FormContextScope>('idle');
 const autoMainTeacherMessage = ref<string | null>(null);
+const localTeachers = ref<TeacherOption[]>([]);
 let formContextRequestId = 0;
 let suppressFormContextReload = false;
 
@@ -219,10 +247,19 @@ const availableSubjects = computed(() =>
     .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
 );
 
+const allTeachers = computed(() => {
+  const byUuid = new Map<string, TeacherOption>();
+  props.teachers.forEach((teacher) => byUuid.set(teacher.uuid, teacher));
+  localTeachers.value.forEach((teacher) => byUuid.set(teacher.uuid, teacher));
+  return [...byUuid.values()];
+});
+
+const normalizeTeacherName = (value: string) => value.trim().replace(/\s+/g, ' ').replace(/ё/g, 'е').toLowerCase();
+
 const teachersByNormalizedName = computed(() => {
   const map = new Map<string, string[]>();
-  props.teachers.forEach((teacher) => {
-    const key = teacher.fullName.trim().toLowerCase();
+  allTeachers.value.forEach((teacher) => {
+    const key = normalizeTeacherName(teacher.fullName);
     if (!key) return;
     const existing = map.get(key) ?? [];
     existing.push(teacher.uuid);
@@ -324,15 +361,15 @@ watch(showSubjectDropdown, (value) => { if (!value) subjectSearchQuery.value = '
 
 const teachersByUuids = (uuids: string[]) => {
   const allowed = new Set(uuids);
-  return props.teachers.filter((teacher) => allowed.has(teacher.uuid));
+  return allTeachers.value.filter((teacher) => allowed.has(teacher.uuid));
 };
 
 const subjectBelongsToAnotherDept = computed(() => !!formContext.value.subjectBlockedReason);
 const availableMainTeachers = computed(() => teachersByUuids(formContext.value.availableMainTeacherUuids));
 const manualMainTeachers = computed(() => {
-  if (props.currentUser.role === 'ADMIN') return props.teachers;
+  if (props.currentUser.role === 'ADMIN') return allTeachers.value;
   const userDepartments = new Set(props.currentUser.departmentIds ?? []);
-  return props.teachers.filter((teacher) => (teacher.departmentIds ?? []).some((departmentId) => userDepartments.has(departmentId)));
+  return allTeachers.value.filter((teacher) => (teacher.departmentIds ?? []).some((departmentId) => userDepartments.has(departmentId)));
 });
 const mainTeacherOptions = computed(() => (
   availableMainTeachers.value.length > 0 ? availableMainTeachers.value : manualMainTeachers.value
@@ -348,6 +385,23 @@ const currentAttemptRule = computed(() => (
   formContext.value.attemptRules.find((rule) => rule.attemptNumber === attemptNumber.value)
   ?? { attemptNumber: attemptNumber.value, requiresChairman: attemptNumber.value > 1, minCommissionMembers: attemptNumber.value === 1 ? 1 : 0 }
 ));
+const controlTypeOptions: Array<{ value: ControlType; label: string }> = [
+  { value: 'unspecified', label: 'Не указано' },
+  { value: 'pass', label: 'Зачет' },
+  { value: 'differentiated_pass', label: 'Дифференцированный зачет' },
+  { value: 'exam', label: 'Экзамен' },
+];
+const controlTypeLabel = (value: ControlType | string) => (
+  controlTypeOptions.find((option) => option.value === value)?.label ?? 'Не указано'
+);
+const hasExamOnSelectedDate = computed(() => {
+  if (!selectedDate.value || controlType.value !== 'exam') return false;
+  return existingGroupRetakes.value.some((retake) => (
+    retake.id !== editingRetakeId.value
+    && retake.date === selectedDate.value
+    && retake.controlType === 'exam'
+  ));
+});
 
 const displayMainTeachers = computed(() => {
   const query = mainSearchQuery.value.toLowerCase();
@@ -363,10 +417,6 @@ const displayCommTeachers = computed(() => {
   const query = commSearchQuery.value.toLowerCase();
   return query ? availableCommissionTeachers.value.filter((teacher) => teacher.fullName.toLowerCase().includes(query)) : availableCommissionTeachers.value;
 });
-
-const removeMainTeacher = (uuid: string) => {
-  mainTeachers.value = mainTeachers.value.filter((id) => id !== uuid);
-};
 
 const removeCommTeacher = (uuid: string) => {
   commissionTeachers.value = commissionTeachers.value.filter((id) => id !== uuid);
@@ -426,10 +476,15 @@ const resetSubjectContext = () => {
     assignedAttempts: [],
     nextAttemptNumber: 1,
     availableMainTeacherUuids: [],
+    mainTeacherOptions: [],
+    autoCreatedMainTeacherNames: [],
+    unresolvedMainTeacherNames: [],
+    mainTeacherDepartmentRequiredNames: [],
     availableCommissionTeacherUuids: [],
     availableChairmanUuids: [],
     availableMeetings: [],
     attemptRules: formContext.value.attemptRules,
+    subjectControl: { controlType: 'unspecified', source: 'default' },
     departmentId: null,
     mainTeacherLacksDept: false,
   };
@@ -442,6 +497,10 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       groupHistory: nextContext.groupHistory,
       existingRetakes: nextContext.existingRetakes,
       availableSubjects: nextContext.availableSubjects,
+      mainTeacherOptions: nextContext.mainTeacherOptions,
+      autoCreatedMainTeacherNames: nextContext.autoCreatedMainTeacherNames,
+      unresolvedMainTeacherNames: nextContext.unresolvedMainTeacherNames,
+      mainTeacherDepartmentRequiredNames: nextContext.mainTeacherDepartmentRequiredNames,
     };
     return;
   }
@@ -453,10 +512,15 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       assignedAttempts: nextContext.assignedAttempts,
       nextAttemptNumber: nextContext.nextAttemptNumber,
       availableMainTeacherUuids: nextContext.availableMainTeacherUuids,
+      mainTeacherOptions: nextContext.mainTeacherOptions,
+      autoCreatedMainTeacherNames: nextContext.autoCreatedMainTeacherNames,
+      unresolvedMainTeacherNames: nextContext.unresolvedMainTeacherNames,
+      mainTeacherDepartmentRequiredNames: nextContext.mainTeacherDepartmentRequiredNames,
       availableCommissionTeacherUuids: [],
       availableChairmanUuids: [],
       availableMeetings: [],
       attemptRules: nextContext.attemptRules,
+      subjectControl: nextContext.subjectControl,
       departmentId: null,
       mainTeacherLacksDept: false,
     };
@@ -470,13 +534,29 @@ const mergeFormContext = (scope: FormContextScope, nextContext: RetakeFormContex
       availableChairmanUuids: nextContext.availableChairmanUuids,
       availableMeetings: nextContext.availableMeetings,
       attemptRules: nextContext.attemptRules,
+      subjectControl: nextContext.subjectControl,
       departmentId: nextContext.departmentId,
       mainTeacherLacksDept: nextContext.mainTeacherLacksDept,
+      mainTeacherOptions: nextContext.mainTeacherOptions,
+      autoCreatedMainTeacherNames: nextContext.autoCreatedMainTeacherNames,
+      unresolvedMainTeacherNames: nextContext.unresolvedMainTeacherNames,
+      mainTeacherDepartmentRequiredNames: nextContext.mainTeacherDepartmentRequiredNames,
     };
     return;
   }
 
   formContext.value = nextContext;
+};
+
+const ingestContextTeachers = (context: RetakeFormContext) => {
+  if (context.mainTeacherOptions.length === 0) return;
+  const knownUuids = new Set([
+    ...props.teachers.map((teacher) => teacher.uuid),
+    ...localTeachers.value.map((teacher) => teacher.uuid),
+  ]);
+  const nextTeachers = context.mainTeacherOptions.filter((teacher) => teacher.uuid && !knownUuids.has(teacher.uuid));
+  if (nextTeachers.length === 0) return;
+  localTeachers.value = [...localTeachers.value, ...nextTeachers];
 };
 
 const formContextErrorText = (error: unknown) => (
@@ -548,10 +628,17 @@ const applyAutoMainTeachers = (context: RetakeFormContext, force = false) => {
 
   const matchedTeacherUuids = [
     ...new Set(
-      candidateNames.flatMap((teacherName) => teachersByNormalizedName.value.get(teacherName.toLowerCase()) ?? []),
+      candidateNames.flatMap((teacherName) => teachersByNormalizedName.value.get(normalizeTeacherName(teacherName)) ?? []),
     ),
   ];
   if (matchedTeacherUuids.length === 0) {
+    if (context.mainTeacherDepartmentRequiredNames.length > 0) {
+      autoMainTeacherMessage.value = `Автоподстановка ведущего недоступна: для ${context.mainTeacherDepartmentRequiredNames.join(', ')} нужно выбрать кафедру.`;
+      if (force) {
+        mainTeachers.value = [];
+      }
+      return;
+    }
     autoMainTeacherMessage.value = 'Автоподстановка ведущего недоступна: преподаватель из прошлого семестра не найден в локальном справочнике.';
     if (force) {
       mainTeachers.value = [];
@@ -572,9 +659,13 @@ const applyAutoMainTeachers = (context: RetakeFormContext, force = false) => {
   if (force || mainTeachers.value.length === 0) {
     mainTeachers.value = suggestedTeacherUuids;
   }
+  const createdSuffix = context.autoCreatedMainTeacherNames.length > 0
+    ? ` Добавлены в справочник: ${context.autoCreatedMainTeacherNames.join(', ')}.`
+    : '';
   autoMainTeacherMessage.value = suggestedTeacherUuids.length === 1
     ? 'Ведущий преподаватель подставлен автоматически по данным прошлого семестра.'
     : 'Ведущие преподаватели подставлены автоматически по данным прошлого семестра.';
+  autoMainTeacherMessage.value += createdSuffix;
 };
 
 const loadFormContext = async (scope: FormContextScope = 'full') => {
@@ -619,6 +710,7 @@ const loadFormContext = async (scope: FormContextScope = 'full') => {
     const nextContext = normalizeRetakeFormContext(rawContext);
 
     mergeFormContext(scope, nextContext);
+    ingestContextTeachers(formContext.value);
     hasLoadedFormContext.value = true;
 
     if ((scope === 'teachers' || scope === 'full') && !editingRetakeId.value) {
@@ -626,6 +718,7 @@ const loadFormContext = async (scope: FormContextScope = 'full') => {
     }
 
     if ((scope === 'subject' || scope === 'full') && selectedSubject.value && !editingRetakeId.value) {
+      controlType.value = formContext.value.subjectControl.controlType;
       applyAutoMainTeachers(formContext.value, scope === 'subject');
     }
 
@@ -777,6 +870,7 @@ const resetRetakeDraft = () => {
   roomUuid.value = '';
   onlineLink.value = '';
   selectedMeetingId.value = '';
+  controlType.value = formContext.value.subjectControl.controlType;
   chairmanTeacher.value = null;
   commissionTeachers.value = [];
 };
@@ -796,6 +890,7 @@ const startEditRetake = async (retake: GroupRetake) => {
   selectedDate.value = retake.date;
   selectedSlots.value = [...retake.timeSlots].sort();
   attemptNumber.value = retake.attemptNumber;
+  controlType.value = retake.controlType;
   mainTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'MAIN').map((teacher) => teacher.teacherUuid);
   commissionTeachers.value = retake.teachers.filter((teacher) => teacher.role === 'COMMISSION').map((teacher) => teacher.teacherUuid);
   chairmanTeacher.value = retake.teachers.find((teacher) => teacher.role === 'CHAIRMAN')?.teacherUuid ?? null;
@@ -821,6 +916,7 @@ const submitRetake = async () => {
   if (commissionTeachers.value.length < currentAttemptRule.value.minCommissionMembers) {
     return addToast(`Для выбранной попытки нужно выбрать членов комиссии: минимум ${currentAttemptRule.value.minCommissionMembers}.`, 'error');
   }
+  if (hasExamOnSelectedDate.value) return addToast('У этой группы уже назначен экзамен на выбранную дату.', 'error');
   if (retakeFormat.value === 'offline' && !roomUuid.value) return addToast('Укажите аудиторию для очного формата.', 'error');
   if (isAttemptUnavailable(attemptNumber.value)) return addToast('Эта попытка пересдачи уже назначена.', 'error');
 
@@ -847,6 +943,7 @@ const submitRetake = async () => {
           meetingId: retakeFormat.value === 'online' && selectedMeetingId.value ? selectedMeetingId.value : undefined,
           isOnline: retakeFormat.value === 'online',
           attemptNumber: attemptNumber.value,
+          controlType: controlType.value,
           mainTeacherUuids: mainTeachers.value,
           commissionTeacherUuids: commissionTeachers.value,
           chairmanUuid: chairmanTeacher.value || undefined,
@@ -1124,6 +1221,12 @@ const saveMeetingLink = async () => {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                 <span>Попытка {{ r.attemptNumber }} — <span class="font-bold">{{ formatDate(r.date) }}</span></span>
+                <span
+                    v-if="r.controlType !== 'unspecified'"
+                    class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-white/10 dark:text-slate-200"
+                >
+                  {{ controlTypeLabel(r.controlType) }}
+                </span>
                 <span v-if="r.link" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">онлайн-встреча: ссылка указана</span>
                 <span v-else-if="r.meetingId" class="text-xs font-semibold text-amber-700 dark:text-amber-300">онлайн-встреча: ссылка не указана</span>
               </div>
@@ -1300,7 +1403,7 @@ const saveMeetingLink = async () => {
       </div>
 
       <div :class="{ 'hidden md:block': sectionsCollapsed.format }">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-5 sm:p-6 bg-slate-50/80 dark:bg-black/10 rounded-[24px] border border-slate-100 dark:border-white/10">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 p-5 sm:p-6 bg-slate-50/80 dark:bg-black/10 rounded-[24px] border border-slate-100 dark:border-white/10">
           <!-- Format -->
           <div>
             <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
@@ -1437,6 +1540,51 @@ const saveMeetingLink = async () => {
             </div>
           </div>
 
+          <!-- Control type -->
+          <div>
+            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
+              Тип контроля
+            </h4>
+
+            <div class="flex flex-col gap-2">
+              <label
+                  v-for="option in controlTypeOptions"
+                  :key="option.value"
+                  class="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15"
+                  :class="controlType === option.value ? 'border-slate-900 dark:border-white' : ''"
+              >
+                <input
+                    type="radio"
+                    v-model="controlType"
+                    :value="option.value"
+                    class="h-4 w-4 text-[var(--accent)]"
+                />
+                <span class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {{ option.label }}
+                </span>
+              </label>
+            </div>
+
+            <p
+                v-if="formContext.subjectControl.source === 'exact'"
+                class="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+            >
+              Подставлено из прошлых назначений этой группы.
+            </p>
+            <p
+                v-else-if="formContext.subjectControl.source === 'group_family'"
+                class="mt-3 text-xs font-semibold text-sky-700 dark:text-sky-300"
+            >
+              Подставлено по похожей группе этого направления.
+            </p>
+            <p
+                v-if="hasExamOnSelectedDate"
+                class="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+            >
+              На выбранную дату у этой группы уже есть экзамен.
+            </p>
+          </div>
+
           <!-- Attempt -->
           <div>
             <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
@@ -1542,7 +1690,7 @@ const saveMeetingLink = async () => {
                     :key="uuid"
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 text-xs font-semibold"
                 >
-                  {{ formatShortName(mainTeacherOptions.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
+                  {{ formatShortName(mainTeacherOptions.find(t => t.uuid === uuid)?.fullName ?? allTeachers.find(t => t.uuid === uuid)?.fullName) }}
                 </span>
               </div>
 
@@ -1614,7 +1762,7 @@ const saveMeetingLink = async () => {
                     v-else
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20 text-xs font-semibold"
                 >
-                  {{ formatShortName(props.teachers.find(t => t.uuid === chairmanTeacher)?.fullName) }}
+                  {{ formatShortName(allTeachers.find(t => t.uuid === chairmanTeacher)?.fullName) }}
                   <X class="w-3 h-3 hover:text-amber-900 dark:hover:text-white cursor-pointer" @click.stop="chairmanTeacher = null" />
                 </span>
               </div>
@@ -1680,7 +1828,7 @@ const saveMeetingLink = async () => {
                     :key="uuid"
                     class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold"
                 >
-                  {{ formatShortName(availableCommissionTeachers.find(t => t.uuid === uuid)?.fullName ?? props.teachers.find(t => t.uuid === uuid)?.fullName) }}
+                  {{ formatShortName(availableCommissionTeachers.find(t => t.uuid === uuid)?.fullName ?? allTeachers.find(t => t.uuid === uuid)?.fullName) }}
                   <X class="w-3 h-3 hover:text-red-500 cursor-pointer" @click.stop="removeCommTeacher(uuid)" />
                 </span>
               </div>

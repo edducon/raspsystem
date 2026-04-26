@@ -34,6 +34,7 @@ const csrfToken = Astro.locals.csrfToken ?? "";
             document.documentElement.classList.remove('dark');
         }
     </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 
 <body class="min-h-screen font-sans antialiased flex flex-col text-slate-900 dark:text-slate-100">
@@ -65,86 +66,66 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         </defs>
 
         <g class="orbit-group orbit-group-a">
-            <path
-                    class="orbit orbit-soft"
-                    d="M -120 1040 C 180 860, 430 760, 710 670 C 980 584, 1210 472, 1540 210"
-            />
-            <path
-                    class="orbit orbit-glow"
-                    d="M -180 1100 C 140 900, 410 780, 730 690 C 1010 610, 1240 500, 1600 170"
-            />
+            <path class="orbit orbit-soft" d="M -120 1040 C 180 860, 430 760, 710 670 C 980 584, 1210 472, 1540 210" />
+            <path class="orbit orbit-glow" d="M -180 1100 C 140 900, 410 780, 730 690 C 1010 610, 1240 500, 1600 170" />
         </g>
 
         <g class="orbit-group orbit-group-b">
-            <path
-                    class="orbit orbit-strong"
-                    d="M 900 1280 C 880 1020, 950 820, 1130 660 C 1290 518, 1450 418, 1710 360"
-            />
+            <path class="orbit orbit-strong" d="M 900 1280 C 880 1020, 950 820, 1130 660 C 1290 518, 1450 418, 1710 360" />
         </g>
 
         <g class="orbit-group orbit-group-c">
-            <path
-                    class="orbit orbit-soft"
-                    d="M 280 -140 C 430 30, 560 180, 660 360 C 770 560, 840 790, 900 1280"
-            />
+            <path class="orbit orbit-soft" d="M 280 -140 C 430 30, 560 180, 660 360 C 770 560, 840 790, 900 1280" />
         </g>
 
         <g class="orbit-group orbit-group-d">
-            <path
-                    class="orbit orbit-faint"
-                    d="M -140 430 C 160 390, 430 340, 730 170 C 1020 5, 1260 -110, 1540 -70"
-            />
+            <path class="orbit orbit-faint" d="M -140 430 C 160 390, 430 340, 730 170 C 1020 5, 1260 -110, 1540 -70" />
         </g>
     </svg>
 </div>
 
-<header class="sticky top-0 z-50 px-3 pt-3 sm:px-4 sm:pt-4">
-    <div class="mx-auto max-w-7xl">
-        <div class="nav-shell h-16 px-4 sm:px-5 lg:px-6 flex items-center gap-4">
-            <a href="/" class="flex items-center gap-3 shrink-0 group">
-                <div class="brand-mark">
-                    <img
-                            src="/image/logo.png"
-                            alt="Логотип университета"
-                            class="w-8 h-8 object-contain"
-                    />
-                </div>
+<header class="site-header">
+    <a href="/" class="site-brand">
+        <img
+                src="/image/logo-light.jpg"
+                alt="Московский Политех"
+                class="site-brand-logo logo-light"
+        />
 
-                <div class="hidden sm:block min-w-0">
-                    <div class="font-extrabold text-[15px] leading-tight tracking-tight text-slate-900 dark:text-white">
-                        Расписание
-                    </div>
-                    <div class="text-[10px] text-slate-500 dark:text-white/55 font-semibold tracking-[0.22em] uppercase truncate">
-                        Московский политехнический университет
-                    </div>
-                </div>
-            </a>
+        <img
+                src="/image/logo-dark.png"
+                alt="Московский Политех"
+                class="site-brand-logo logo-dark"
+        />
+    </a>
 
-            <div class="flex-1 flex items-center justify-center overflow-hidden min-w-0">
-                <slot name="nav-center" />
-            </div>
+    <div class="site-actions">
+        <slot name="nav-actions" />
 
-            <div class="flex items-center gap-2 shrink-0">
-                <slot name="nav-actions" />
+        <button
+                id="theme-toggle"
+                class="site-theme-button"
+                title="Переключить тему"
+                aria-label="Переключить тему"
+        >
+            <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+            </svg>
 
-                <div class="hidden sm:block w-px h-6 bg-slate-200/80 dark:bg-white/10 mx-1"></div>
-
-                <button
-                        id="theme-toggle"
-                        class="theme-button"
-                        title="Переключить тему"
-                        aria-label="Переключить тему"
-                >
-                    <svg id="theme-toggle-dark-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-                    </svg>
-
-                    <svg id="theme-toggle-light-icon" class="hidden w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
+            <svg id="theme-toggle-light-icon" class="hidden w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="4.8" fill="currentColor" />
+                <g stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <line x1="12" y1="2.4" x2="12" y2="5" />
+                    <line x1="12" y1="19" x2="12" y2="21.6" />
+                    <line x1="2.4" y1="12" x2="5" y2="12" />
+                    <line x1="19" y1="12" x2="21.6" y2="12" />
+                    <line x1="5.2" y1="5.2" x2="7" y2="7" />
+                    <line x1="17" y1="17" x2="18.8" y2="18.8" />
+                    <line x1="5.2" y1="18.8" x2="7" y2="17" />
+                    <line x1="17" y1="7" x2="18.8" y2="5.2" />
+                </g>
+            </svg>
+        </button>
     </div>
 </header>
 
@@ -188,18 +169,23 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
     const themeToggleBtn = document.getElementById('theme-toggle');
 
-    if (document.documentElement.classList.contains('dark')) {
-        themeToggleLightIcon?.classList.remove('hidden');
-    } else {
-        themeToggleDarkIcon?.classList.remove('hidden');
-    }
-
-    themeToggleBtn?.addEventListener('click', function () {
+    function updateThemeIcon() {
         const isDark = document.documentElement.classList.contains('dark');
 
+        if (isDark) {
+            themeToggleLightIcon?.classList.remove('hidden');
+            themeToggleDarkIcon?.classList.add('hidden');
+        } else {
+            themeToggleDarkIcon?.classList.remove('hidden');
+            themeToggleLightIcon?.classList.add('hidden');
+        }
+    }
+
+    updateThemeIcon();
+
+    themeToggleBtn?.addEventListener('click', function () {
         const toggleTheme = () => {
-            themeToggleDarkIcon?.classList.toggle('hidden');
-            themeToggleLightIcon?.classList.toggle('hidden');
+            const isDark = document.documentElement.classList.contains('dark');
 
             if (isDark) {
                 document.documentElement.classList.remove('dark');
@@ -208,6 +194,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
                 document.documentElement.classList.add('dark');
                 localStorage.setItem('theme', 'dark');
             }
+
+            updateThemeIcon();
         };
 
         if (!document.startViewTransition) {
@@ -215,9 +203,14 @@ const csrfToken = Astro.locals.csrfToken ?? "";
             return;
         }
 
-        const x = isDark ? innerWidth : 0;
-        const y = isDark ? innerHeight : 0;
-        const endRadius = Math.hypot(innerWidth, innerHeight);
+        const rect = themeToggleBtn.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+
+        const endRadius = Math.hypot(
+            Math.max(x, innerWidth - x),
+            Math.max(y, innerHeight - y)
+        );
 
         const transition = document.startViewTransition(toggleTheme);
 
@@ -230,7 +223,7 @@ const csrfToken = Astro.locals.csrfToken ?? "";
                     ]
                 },
                 {
-                    duration: 460,
+                    duration: 520,
                     easing: 'ease-in-out',
                     pseudoElement: '::view-transition-new(root)'
                 }
@@ -258,6 +251,8 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         --accent-soft: rgba(90, 122, 165, 0.12);
         --danger: #ba4747;
         --success: #2b7456;
+        --poly-red: #ef3340;
+        --poly-red-dark: #d92d39;
     }
 
     html.dark {
@@ -393,47 +388,96 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         opacity: 0.4;
     }
 
-    .nav-shell,
-    .footer-shell {
+    .poly-header {
+        min-height: 76px;
+        border-radius: 26px;
         border: 1px solid var(--panel-border);
-        background: var(--panel-bg);
+        background: rgba(255, 255, 255, 0.84);
         box-shadow: var(--panel-shadow);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 14px 18px;
+    }
+
+    html.dark .poly-header {
+        background: rgba(17, 22, 28, 0.84);
+    }
+
+    .poly-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        color: var(--text-main);
+        text-decoration: none;
+        min-width: 0;
+    }
+
+    .poly-logo {
+        width: 48px;
+        height: 48px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--panel-bg-strong);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+    }
+
+    .poly-brand-text {
+        display: flex;
+        flex-direction: column;
+        font-size: 18px;
+        line-height: 0.95;
+        font-weight: 900;
+        letter-spacing: 0.045em;
+        text-transform: uppercase;
+    }
+
+    .poly-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+    }
+
+    .poly-actions > a {
+        min-height: 48px !important;
+        border-radius: 18px !important;
+        border: 0 !important;
+        background: var(--poly-red) !important;
+        color: #ffffff !important;
+        padding: 0 24px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 13px !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        box-shadow: 0 10px 22px rgba(239, 51, 64, 0.18) !important;
+        transition: transform 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease !important;
+    }
+
+    .poly-actions > a:hover {
+        background: var(--poly-red-dark) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 14px 28px rgba(239, 51, 64, 0.24) !important;
+    }
+
+    .poly-theme-button {
+        width: 48px;
+        height: 48px;
         border-radius: 18px;
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-    }
-
-    .nav-shell {
-        transition: box-shadow 0.24s ease, border-color 0.24s ease;
-    }
-
-    .brand-mark {
-        width: 42px;
-        height: 42px;
-        border-radius: 15px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 248, 252, 0.82) 100%);
-        border: 1px solid rgba(103, 112, 130, 0.14);
-        box-shadow: 0 6px 16px rgba(30, 36, 44, 0.08);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-    }
-
-    html.dark .brand-mark {
-        background: linear-gradient(180deg, rgba(31, 39, 49, 0.92) 0%, rgba(23, 29, 37, 0.78) 100%);
-        border-color: rgba(214, 223, 235, 0.1);
-    }
-
-    .theme-button {
-        width: 40px;
-        height: 40px;
-        border-radius: 16px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-soft);
+        color: var(--text-main);
         background: var(--panel-muted);
         border: 1px solid var(--panel-border);
         transition: transform 0.22s ease, color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
@@ -441,10 +485,20 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         -webkit-backdrop-filter: blur(10px);
     }
 
-    .theme-button:hover {
+    .poly-theme-button:hover {
+        transform: translateY(-1px);
         color: var(--text-main);
         border-color: var(--panel-border-strong);
         box-shadow: 0 8px 18px rgba(33, 38, 45, 0.08);
+    }
+
+    .footer-shell {
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        box-shadow: var(--panel-shadow);
+        border-radius: 18px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
     }
 
     .footer-link {
@@ -529,57 +583,33 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     }
 
     @keyframes orbitDashStrong {
-        from {
-            stroke-dashoffset: 0;
-        }
-        to {
-            stroke-dashoffset: -504;
-        }
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: -504; }
     }
 
     @keyframes orbitDashSoft {
-        from {
-            stroke-dashoffset: 0;
-        }
-        to {
-            stroke-dashoffset: 376;
-        }
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: 376; }
     }
 
     @keyframes orbitDashGlow {
-        from {
-            stroke-dashoffset: 0;
-        }
-        to {
-            stroke-dashoffset: -600;
-        }
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: -600; }
     }
 
     @keyframes orbitDashFaint {
-        from {
-            stroke-dashoffset: 0;
-        }
-        to {
-            stroke-dashoffset: 228;
-        }
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: 228; }
     }
 
     @keyframes orbitFloatA {
-        from {
-            transform: translate3d(0, 0, 0) scale(1);
-        }
-        to {
-            transform: translate3d(24px, -14px, 0) scale(1.018);
-        }
+        from { transform: translate3d(0, 0, 0) scale(1); }
+        to { transform: translate3d(24px, -14px, 0) scale(1.018); }
     }
 
     @keyframes orbitFloatB {
-        from {
-            transform: translate3d(0, 0, 0) scale(1);
-        }
-        to {
-            transform: translate3d(-20px, 16px, 0) scale(1.02);
-        }
+        from { transform: translate3d(0, 0, 0) scale(1); }
+        to { transform: translate3d(-20px, 16px, 0) scale(1.02); }
     }
 
     @keyframes orbitFloatC {
@@ -621,6 +651,38 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         .orbit-glow {
             stroke-width: 24;
         }
+
+        .poly-header {
+            min-height: 66px;
+            border-radius: 22px;
+            padding: 10px 12px;
+        }
+
+        .poly-logo {
+            width: 42px;
+            height: 42px;
+        }
+
+        .poly-brand-text {
+            font-size: 13px;
+        }
+
+        .poly-actions {
+            gap: 8px;
+        }
+
+        .poly-actions > a {
+            min-height: 42px !important;
+            padding: 0 16px !important;
+            border-radius: 16px !important;
+            font-size: 12px !important;
+        }
+
+        .poly-theme-button {
+            width: 42px;
+            height: 42px;
+            border-radius: 16px;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -634,6 +696,279 @@ const csrfToken = Astro.locals.csrfToken ?? "";
         .orbit-faint {
             animation: none !important;
         }
+    }
+    .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        width: 100%;
+        padding: 24px 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .site-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        text-decoration: none;
+        color: var(--text-main);
+    }
+
+    .site-brand-logo {
+        width: 46px;
+        height: 46px;
+        object-fit: contain;
+    }
+
+    .site-brand-text {
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        text-transform: uppercase;
+    }
+
+    .site-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .site-theme-button {
+        width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: rgba(255, 255, 255, 0.76);
+        color: var(--text-main);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(14px);
+    }
+
+    html.dark .site-theme-button {
+        background: rgba(23, 29, 37, 0.76);
+    }
+
+    @media (max-width: 640px) {
+        .site-header {
+            padding: 18px 18px;
+        }
+
+        .site-brand-logo {
+            width: 40px;
+            height: 40px;
+        }
+
+        .site-brand-text {
+            font-size: 14px;
+        }
+
+        .site-actions > a,
+        .site-theme-button {
+            height: 40px !important;
+        }
+
+        .site-actions > a {
+            padding: 0 16px !important;
+            font-size: 12px !important;
+        }
+
+        .site-theme-button {
+            width: 40px;
+        }
+    }
+    .logo-dark {
+        display: none;
+    }
+
+    html.dark .logo-light {
+        display: none;
+    }
+
+    html.dark .logo-dark {
+        display: block;
+    }
+    .site-brand-logo {
+        height: 44px;
+        width: auto;
+    }
+
+    .logo-light {
+        display: block;
+    }
+
+    .logo-dark {
+        display: none;
+    }
+
+    html.dark .logo-light {
+        display: none;
+    }
+
+    html.dark .logo-dark {
+        display: block;
+    }
+    .login-btn {
+        height: 44px;
+        min-width: 170px;
+        padding: 0 28px;
+
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 7px;
+
+        background: #1a1617;
+        color: #ffffff;
+        border: 1px solid rgba(239, 51, 64, 0.28);
+
+        font-size: 14px;
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+
+        box-shadow: none;
+        transition:
+                background-color 0.2s ease,
+                border-color 0.2s ease,
+                color 0.2s ease,
+                transform 0.2s ease;
+    }
+
+    .login-btn:hover {
+        background: #ef3340;
+        border-color: #ef3340;
+        color: #ffffff;
+        transform: translateY(-1px);
+    }
+
+    .login-btn:active {
+        transform: translateY(0);
+    }
+
+    html.dark .login-btn {
+        background: rgba(255, 248, 250, 0.92);
+        color: #1a1617;
+        border: 1px solid rgba(239, 51, 64, 0.45);
+    }
+
+    html.dark .login-btn:hover {
+        background: #ffffff;
+        color: #ef3340;
+        border-color: #ef3340;
+    }
+
+    body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-weight: 500;
+    }
+
+    h1, h2, h3 {
+        font-weight: 900;
+        letter-spacing: -0.02em;
+    }
+
+    button,
+    .login-btn {
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .tnum {
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum" 1;
+    }
+
+    .login-btn {
+        height: 46px;
+        padding: 0 26px;
+        border-radius: 6px;
+
+        background: transparent;
+        color: #111;
+        border: 1px solid rgba(0,0,0,0.2);
+
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+
+        transition: all 0.2s ease;
+    }
+
+    .login-btn:hover {
+        background: #111;
+        color: #fff;
+        border-color: #111;
+    }
+
+    html.dark .login-btn {
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    html.dark .login-btn:hover {
+        background: #fff;
+        color: #111;
+    }
+    .login-btn {
+        height: 46px;
+        padding: 0 26px;
+        border-radius: 6px;
+
+        background: #111;
+        color: #fff;
+        border: 1px solid #111;
+
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+
+        transition:
+                background-color 0.2s ease,
+                color 0.2s ease,
+                transform 0.15s ease,
+                box-shadow 0.2s ease;
+    }
+
+    .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .login-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    html.dark .login-btn {
+        background: #fff;
+        color: #111;
+        border: 1px solid #fff;
+    }
+
+    html.dark .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(255, 255, 255, 0.15);
+    }
+
+    html.dark .login-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 10px rgba(255, 255, 255, 0.1);
+    }
+    .login-btn {
+        border: 1px solid #111 !important;
+    }
+
+    html.dark .login-btn {
+        border: 1px solid #fff !important;
     }
 </style>
 </body>

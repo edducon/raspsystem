@@ -50,6 +50,13 @@ class RetakeAttemptRuleUpdate(BaseModel):
     min_commission_members: int = 0
 
 
+class RetakeSubjectControlRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    control_type: str = "unspecified"
+    source: str = "default"
+
+
 class RetakeRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -64,6 +71,7 @@ class RetakeRead(BaseModel):
     meeting_id: str | None = None
     department_id: int | None = None
     attempt_number: int
+    control_type: str = "unspecified"
     created_by: str | None = None
     created_at: datetime | None = None
     can_delete: bool = False
@@ -86,6 +94,7 @@ class GroupRetakeRead(BaseModel):
     department_id: int | None = None
     created_by: str | None = None
     can_delete: bool = False
+    control_type: str = "unspecified"
     teachers: list[RetakeTeacherRead] = Field(default_factory=list)
 
 
@@ -101,6 +110,7 @@ class TeacherRetakeRead(BaseModel):
     room: str | None = None
     link: str | None = None
     attempt_number: int
+    control_type: str = "unspecified"
     my_role: str
 
 
@@ -116,6 +126,14 @@ class RetakeSubjectOptionRead(BaseModel):
 
     uuid: str
     name: str
+
+
+class RetakeTeacherOptionRead(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+    uuid: str
+    full_name: str
+    department_ids: list[int] | None = None
 
 
 class RetakeFormContextRequest(BaseModel):
@@ -142,10 +160,15 @@ class RetakeFormContextRead(BaseModel):
     assigned_attempts: list[int] = Field(default_factory=list)
     next_attempt_number: int = 1
     available_main_teacher_uuids: list[str] = Field(default_factory=list)
+    main_teacher_options: list[RetakeTeacherOptionRead] = Field(default_factory=list)
+    auto_created_main_teacher_names: list[str] = Field(default_factory=list)
+    unresolved_main_teacher_names: list[str] = Field(default_factory=list)
+    main_teacher_department_required_names: list[str] = Field(default_factory=list)
     available_commission_teacher_uuids: list[str] = Field(default_factory=list)
     available_chairman_uuids: list[str] = Field(default_factory=list)
     available_meetings: list[RetakeMeetingRead] = Field(default_factory=list)
     attempt_rules: list[RetakeAttemptRuleRead] = Field(default_factory=list)
+    subject_control: RetakeSubjectControlRead = Field(default_factory=RetakeSubjectControlRead)
     department_id: int | None = None
     main_teacher_lacks_dept: bool = False
 
@@ -196,6 +219,7 @@ class RetakeCreateRequest(BaseModel):
     department_id: int | None = None
     is_online: bool = False
     attempt_number: int = 1
+    control_type: str = "unspecified"
     main_teacher_uuids: list[str]
     commission_teacher_uuids: list[str] = Field(default_factory=list)
     chairman_uuid: str | None = None
@@ -224,6 +248,15 @@ class RetakeCreateRequest(BaseModel):
         if not unique_teachers:
             raise ValueError("Нужно выбрать хотя бы одного ведущего преподавателя.")
         return unique_teachers
+
+    @field_validator("control_type")
+    @classmethod
+    def validate_control_type(cls, value: str) -> str:
+        allowed = {"unspecified", "pass", "differentiated_pass", "exam"}
+        normalized = (value or "unspecified").strip()
+        if normalized not in allowed:
+            raise ValueError("Некорректный тип контроля.")
+        return normalized
 
 
 class RetakeUpdateRequest(RetakeCreateRequest):

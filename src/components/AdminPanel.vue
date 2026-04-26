@@ -1,11 +1,12 @@
 ﻿<script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue';
-import { BackendApiError, fetchBackendFromBrowser } from '../lib/backend-api';
+import { BackendApiError, fetchBackendBlobFromBrowser, fetchBackendFromBrowser } from '../lib/backend-api';
 
 type UserRole = 'ADMIN' | 'EMPLOYEE' | 'TEACHER';
 type StatusKind = 'success' | 'error';
 type SnapshotSummary = { id: number; name: string; semesterLabel: string; status: string; sourceType: string; description: string | null; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string; dateRangeStart: string | null; dateRangeEnd: string | null; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number };
-type ArchiveItem = { id: string; name: string; semesterLabel: string; sourceLabel: string; kind: 'manual' | 'snapshot'; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string | null; dateRangeStart: string | null; dateRangeEnd: string | null; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number; accentClass: string; badgeText: string | null; deletePath: string | null };
+type SnapshotDetail = SnapshotSummary & { groups: unknown[]; subjects: unknown[]; teachers: unknown[]; scheduleItems: unknown[] };
+type ArchiveItem = { id: string; snapshotId: number; name: string; semesterLabel: string; sourceLabel: string; isReferenceForRetakes: boolean; capturedAt: string | null; createdAt: string | null; dateRangeStart: string | null; dateRangeEnd: string | null; groupCount: number; subjectCount: number; teacherCount: number; scheduleItemCount: number; accentClass: string; badgeText: string | null };
 type UserItem = { id: number; username: string; fullName: string; role: UserRole; isActive: boolean; mustChangePassword?: boolean; departmentId: number | null; departmentIds: number[]; teacherUuid: string | null };
 type DepartmentItem = { id: number; name: string; short_name: string };
 type TeacherDirectoryItem = { uuid: string; fullName: string; departmentIds: number[]; positionId: number | null };
@@ -15,6 +16,7 @@ type PastSemesterStatus = { isLoaded: boolean; importedRecords: number; uniqueGr
 type AuditLogItem = { id: number; createdAt: string; actorUserId: number | null; action: string; targetType: string | null; targetId: string | null; status: string; ipAddress: string | null; userAgent: string | null; details: Record<string, unknown> | null };
 type AuditLogListResponse = { items: AuditLogItem[]; total: number; limit: number; offset: number };
 type RetakeAttemptRule = { attemptNumber: number; requiresChairman: boolean; minCommissionMembers: number };
+type ConfirmTone = 'default' | 'primary' | 'danger';
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   'auth.login': 'Вход в систему',
@@ -69,6 +71,8 @@ const teacherDirectory = ref([...props.initialTeacherDirectory]);
 const positions = ref([...props.initialPositions]);
 const teachers = ref([...props.initialTeachers]);
 const scheduleSnapshots = ref([...props.initialScheduleSnapshots]);
+const selectedSnapshot = ref<SnapshotDetail | null>(null);
+const selectedSnapshotLoading = ref(false);
 const attemptRules = ref<RetakeAttemptRule[]>([]);
 const auditLogs = ref([...props.initialAuditLogs.items]);
 const auditTotal = ref(props.initialAuditLogs.total);
@@ -102,6 +106,7 @@ const busy = reactive({
   syncTeachers: false,
   importPastSemester: false,
   syncSchedule: false,
+  downloadSnapshot: '',
   attemptRules: false,
   createAccount: '' as string,
   updateTeacherPosition: '' as string,
@@ -145,6 +150,15 @@ const hasAuditFilters = computed(() => Boolean(auditFilters.query.trim() || audi
 // Account creation modal for existing teacher
 const showAccountModal = ref(false);
 const accountTarget = reactive({ uuid: '', fullName: '', username: '', password: '', role: 'TEACHER' as UserRole, department_id: '' });
+const confirmDialog = reactive({
+  open: false,
+  title: '',
+  message: '',
+  confirmLabel: 'Подтвердить',
+  cancelLabel: 'Отмена',
+  tone: 'default' as ConfirmTone,
+});
+let confirmResolver: ((confirmed: boolean) => void) | null = null;
 
 const pastSemesterFileInput = ref<HTMLInputElement | null>(null);
 
@@ -303,6 +317,34 @@ function openAccountModal(teacher: TeacherDirectoryItem) {
   accountTarget.role = 'TEACHER';
   accountTarget.department_id = teacher.departmentIds.length > 0 ? String(teacher.departmentIds[0]) : '';
   showAccountModal.value = true;
+}
+
+function askConfirmation(options: {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: ConfirmTone;
+}): Promise<boolean> {
+  if (confirmResolver) {
+    confirmResolver(false);
+  }
+  confirmDialog.title = options.title;
+  confirmDialog.message = options.message;
+  confirmDialog.confirmLabel = options.confirmLabel ?? 'Подтвердить';
+  confirmDialog.cancelLabel = options.cancelLabel ?? 'Отмена';
+  confirmDialog.tone = options.tone ?? 'default';
+  confirmDialog.open = true;
+
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+
+function closeConfirmation(confirmed: boolean) {
+  confirmDialog.open = false;
+  confirmResolver?.(confirmed);
+  confirmResolver = null;
 }
 
 // --- API calls ---
@@ -593,7 +635,13 @@ async function handlePastSemesterFile(event: Event) {
 }
 
 async function syncCurrentSchedule() {
-  if (!window.confirm('Скачать текущее расписание из внешнего API (Raspyx)? Это может занять около минуты. Расписание будет установлено как активный семестр.')) {
+  const confirmed = await askConfirmation({
+    title: 'Скачать текущий семестр?',
+    message: 'Система загрузит расписание из Raspyx и установит новый снимок как активный эталон для пересдач. Это может занять около минуты.',
+    confirmLabel: 'Скачать',
+    tone: 'primary',
+  });
+  if (!confirmed) {
     return;
   }
 
@@ -612,11 +660,17 @@ async function syncCurrentSchedule() {
   }
 }
 
-async function setSnapshotAsReference(rawIdStr: string) {
-  const snapshotId = Number(rawIdStr.replace('snapshot-', ''));
+async function setSnapshotAsReference(rawId: string | number) {
+  const snapshotId = typeof rawId === 'number' ? rawId : Number(rawId.replace('snapshot-', ''));
   if (isNaN(snapshotId)) return;
 
-  if (!window.confirm('Назначить этот семестр текущим эталоном для пересдач? Все новые пересдачи будут использовать его расписание.')) {
+  const confirmed = await askConfirmation({
+    title: 'Сделать снимок эталоном?',
+    message: 'Все новые пересдачи будут использовать группы, предметы и расписание из выбранного снимка.',
+    confirmLabel: 'Сделать эталоном',
+    tone: 'primary',
+  });
+  if (!confirmed) {
     return;
   }
 
@@ -631,38 +685,68 @@ async function setSnapshotAsReference(rawIdStr: string) {
   }
 }
 
-const archiveItems = computed<ArchiveItem[]>(() => {
-  const items: ArchiveItem[] = [];
-
-  if (pastSemesterInfo.value) {
-    items.push({
-      id: 'past-semester-manual',
-      name: 'Предыдущий семестр',
-      semesterLabel: 'Ручной импорт прошлого семестра',
-      sourceLabel: 'Источник: schedules.json',
-      kind: 'manual',
-      isReferenceForRetakes: false,
-      capturedAt: null,
-      createdAt: null,
-      dateRangeStart: pastSemesterInfo.value.dateRangeStart,
-      dateRangeEnd: pastSemesterInfo.value.dateRangeEnd,
-      groupCount: pastSemesterInfo.value.groups,
-      subjectCount: pastSemesterInfo.value.subjects,
-      teacherCount: 0,
-      scheduleItemCount: pastSemesterInfo.value.imported,
-      accentClass: 'border-amber-300 bg-amber-50/80 dark:bg-amber-900/10 dark:border-amber-700/40',
-      badgeText: 'Ручная загрузка',
-      deletePath: null,
-    });
+async function viewSnapshot(snapshotId: number) {
+  selectedSnapshotLoading.value = true;
+  try {
+    selectedSnapshot.value = await fetchBackendFromBrowser<SnapshotDetail>(
+      props.backendApiUrl,
+      `/schedule-snapshots/${snapshotId}`,
+    );
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось открыть снимок расписания.'));
+  } finally {
+    selectedSnapshotLoading.value = false;
   }
+}
 
-  scheduleSnapshots.value.forEach((item) => {
-    items.push({
+async function downloadSnapshot(snapshotId: number, format: 'json' | 'csv') {
+  const busyKey = `${snapshotId}-${format}`;
+  busy.downloadSnapshot = busyKey;
+  try {
+    const blob = await fetchBackendBlobFromBrowser(
+      props.backendApiUrl,
+      `/schedule-snapshots/${snapshotId}/export.${format}`,
+    );
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `schedule_snapshot_${snapshotId}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось скачать снимок.'));
+  } finally {
+    busy.downloadSnapshot = '';
+  }
+}
+
+async function deleteSnapshot(snapshotId: number) {
+  const confirmed = await askConfirmation({
+    title: 'Удалить снимок?',
+    message: 'Снимок расписания будет удалён из архива. Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+    tone: 'danger',
+  });
+  if (!confirmed) return;
+  try {
+    await fetchBackendFromBrowser(props.backendApiUrl, `/schedule-snapshots/${snapshotId}`, { method: 'DELETE' });
+    if (selectedSnapshot.value?.id === snapshotId) selectedSnapshot.value = null;
+    setStatus('success', 'Снимок удалён.');
+    await reloadAll();
+  } catch (error) {
+    setStatus('error', errorText(error, 'Не удалось удалить снимок.'));
+  }
+}
+
+const archiveItems = computed<ArchiveItem[]>(() => {
+  const items: ArchiveItem[] = scheduleSnapshots.value.map((item) => ({
       id: `snapshot-${item.id}`,
+      snapshotId: item.id,
       name: item.name,
       semesterLabel: item.semesterLabel,
-      sourceLabel: item.sourceType === 'manual' ? 'Источник: ручной snapshot' : `Источник: ${item.sourceType}`,
-      kind: 'snapshot',
+      sourceLabel: `Источник: ${item.sourceType}`,
       isReferenceForRetakes: item.isReferenceForRetakes,
       capturedAt: item.capturedAt,
       createdAt: item.createdAt,
@@ -674,15 +758,19 @@ const archiveItems = computed<ArchiveItem[]>(() => {
       scheduleItemCount: item.scheduleItemCount,
       accentClass: item.isReferenceForRetakes ? 'border-green-400 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5',
       badgeText: item.isReferenceForRetakes ? 'Текущий эталон' : null,
-      deletePath: `/schedule-snapshots/${item.id}`,
-    });
-  });
+    }));
 
   return items;
 });
 
 async function deleteEntity(path: string, msg: string) {
-  if (!window.confirm('Вы уверены?')) return;
+  const confirmed = await askConfirmation({
+    title: 'Удалить запись?',
+    message: 'Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+    tone: 'danger',
+  });
+  if (!confirmed) return;
   try { await fetchBackendFromBrowser(props.backendApiUrl, path, { method: 'DELETE' }); setStatus('success', msg); await reloadAll(); }
   catch (error) { setStatus('error', errorText(error, 'Ошибка при удалении.')); }
 }
@@ -1037,6 +1125,46 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- ==================== CONFIRMATION MODAL ==================== -->
+    <div v-if="confirmDialog.open" class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm p-4">
+      <div class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-slate-900">
+        <div
+            class="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-black"
+            :class="confirmDialog.tone === 'danger'
+              ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'
+              : confirmDialog.tone === 'primary'
+                ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
+                : 'bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200'"
+        >
+          !
+        </div>
+        <h3 class="text-xl font-black text-slate-950 dark:text-white">{{ confirmDialog.title }}</h3>
+        <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ confirmDialog.message }}</p>
+
+        <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+              type="button"
+              @click="closeConfirmation(false)"
+              class="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
+          >
+            {{ confirmDialog.cancelLabel }}
+          </button>
+          <button
+              type="button"
+              @click="closeConfirmation(true)"
+              class="h-11 rounded-2xl px-5 text-sm font-black transition-colors"
+              :class="confirmDialog.tone === 'danger'
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : confirmDialog.tone === 'primary'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200'"
+          >
+            {{ confirmDialog.confirmLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== SETTINGS TAB ==================== -->
     <div v-if="activeTab === 'settings'" class="space-y-6">
       <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6 space-y-4">
@@ -1117,18 +1245,14 @@ onMounted(() => {
       <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.04] p-6">
         <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <h2 class="text-xl font-black dark:text-white">Архив семестров</h2>
+            <h2 class="text-xl font-black dark:text-white">Снимки расписания</h2>
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">
-              Здесь хранятся прошлые семестры. Первый прошлый семестр можно загрузить вручную через <code class="bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">schedules.json</code> или тестово собрать из текущего API 2.0.0.
+              Архив расписаний. Снимки можно просматривать, скачивать в JSON/CSV и назначать эталоном для пересдач.
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <input ref="pastSemesterFileInput" type="file" accept=".json" class="hidden" @change="handlePastSemesterFile" />
             <button @click="syncCurrentSchedule" :disabled="busy.syncSchedule" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
-              {{ busy.syncSchedule ? '⏳ Скачивание из API...' : '🔄 Скачать текущий семестр' }}
-            </button>
-            <button @click="triggerPastSemesterUpload" :disabled="busy.importPastSemester" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
-              {{ busy.importPastSemester ? '⏳ Импорт...' : '📂 Загрузить schedules.json' }}
+              {{ busy.syncSchedule ? 'Скачивание из API...' : 'Скачать текущий семестр' }}
             </button>
           </div>
         </div>
@@ -1137,29 +1261,96 @@ onMounted(() => {
           <p class="text-sm">Архив семестров пока пуст.</p>
         </div>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div v-else class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_24rem] gap-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div v-for="item in archiveItems" :key="item.id" class="p-5 border rounded-3xl" :class="item.accentClass">
-            <span v-if="item.badgeText" class="px-2.5 py-1 text-white text-[10px] uppercase font-black rounded-lg mb-2 inline-block" :class="item.kind === 'manual' ? 'bg-amber-600' : 'bg-green-500'">{{ item.badgeText }}</span>
+            <span v-if="item.badgeText" class="px-2.5 py-1 text-white text-[10px] uppercase font-black rounded-lg mb-2 inline-block bg-green-500">{{ item.badgeText }}</span>
             <div class="font-bold text-lg dark:text-white">{{ item.name }}</div>
             <div class="text-sm text-slate-600 dark:text-slate-300">Семестр: {{ item.semesterLabel }}</div>
             <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">{{ item.sourceLabel }}</div>
             <div class="text-xs text-slate-500 mt-3 space-y-1">
               <p>Групп: {{ item.groupCount }} | Предметов: {{ item.subjectCount }} | Преподавателей: {{ item.teacherCount }} | Записей: {{ item.scheduleItemCount }}</p>
               <p>Период: {{ item.dateRangeStart && item.dateRangeEnd ? `${formatDateOnly(item.dateRangeStart)} - ${formatDateOnly(item.dateRangeEnd)}` : 'Диапазон дат не найден в данных расписания' }}</p>
-              <p v-if="item.kind === 'snapshot'">Фиксация: {{ formatDateTime(item.capturedAt) }} | Создан: {{ formatDateTime(item.createdAt) }}</p>
+              <p>Фиксация: {{ formatDateTime(item.capturedAt) }} | Создан: {{ formatDateTime(item.createdAt) }}</p>
             </div>
-                        <div class="mt-4 flex flex-wrap items-center gap-3">
-              <button v-if="item.kind === 'snapshot' && !item.isReferenceForRetakes"
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                      @click="viewSnapshot(item.snapshotId)"
+                      class="px-3 py-1.5 bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200 font-bold text-xs rounded-lg hover:bg-slate-200 dark:hover:bg-white/15 transition-colors">
+                Просмотр
+              </button>
+              <button
+                      @click="downloadSnapshot(item.snapshotId, 'json')"
+                      :disabled="busy.downloadSnapshot === `${item.snapshotId}-json`"
+                      class="px-3 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 font-bold text-xs rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50">
+                JSON
+              </button>
+              <button
+                      @click="downloadSnapshot(item.snapshotId, 'csv')"
+                      :disabled="busy.downloadSnapshot === `${item.snapshotId}-csv`"
+                      class="px-3 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 font-bold text-xs rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50">
+                CSV
+              </button>
+              <button v-if="!item.isReferenceForRetakes"
                       @click="setSnapshotAsReference(item.id)"
                       class="px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 font-bold text-xs rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors border border-blue-200 dark:border-blue-800/30">
                 Сделать эталоном
               </button>
 
-              <button v-if="item.deletePath"
-                      @click="deleteEntity(item.deletePath, 'Снимок удалён')"
+              <button v-if="!item.isReferenceForRetakes"
+                      @click="deleteSnapshot(item.snapshotId)"
                       class="px-3 py-1.5 text-red-500 font-bold text-xs hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
                 Удалить
               </button>
+            </div>
+          </div>
+          </div>
+
+          <div class="rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-black/20 p-5 min-h-[18rem]">
+            <div v-if="selectedSnapshotLoading" class="text-sm text-slate-500 dark:text-slate-400">
+              Загружаем снимок...
+            </div>
+            <div v-else-if="!selectedSnapshot" class="text-sm text-slate-500 dark:text-slate-400">
+              Выберите снимок, чтобы увидеть состав данных перед скачиванием или назначением эталоном.
+            </div>
+            <div v-else class="space-y-4">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h3 class="text-base font-black text-slate-950 dark:text-white">{{ selectedSnapshot.name }}</h3>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ selectedSnapshot.semesterLabel }}</p>
+                </div>
+                <button @click="selectedSnapshot = null" class="text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">Закрыть</button>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div class="rounded-2xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 p-3">
+                  <div class="text-slate-500 dark:text-slate-400 text-xs">Группы</div>
+                  <div class="font-black text-slate-950 dark:text-white">{{ selectedSnapshot.groupCount }}</div>
+                </div>
+                <div class="rounded-2xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 p-3">
+                  <div class="text-slate-500 dark:text-slate-400 text-xs">Предметы</div>
+                  <div class="font-black text-slate-950 dark:text-white">{{ selectedSnapshot.subjectCount }}</div>
+                </div>
+                <div class="rounded-2xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 p-3">
+                  <div class="text-slate-500 dark:text-slate-400 text-xs">Преподаватели</div>
+                  <div class="font-black text-slate-950 dark:text-white">{{ selectedSnapshot.teacherCount }}</div>
+                </div>
+                <div class="rounded-2xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 p-3">
+                  <div class="text-slate-500 dark:text-slate-400 text-xs">Пары</div>
+                  <div class="font-black text-slate-950 dark:text-white">{{ selectedSnapshot.scheduleItemCount }}</div>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                <p>Источник: {{ selectedSnapshot.sourceType }}</p>
+                <p>Период: {{ selectedSnapshot.dateRangeStart && selectedSnapshot.dateRangeEnd ? `${formatDateOnly(selectedSnapshot.dateRangeStart)} - ${formatDateOnly(selectedSnapshot.dateRangeEnd)}` : 'не найден' }}</p>
+                <p>Фиксация: {{ formatDateTime(selectedSnapshot.capturedAt) }}</p>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <button @click="downloadSnapshot(selectedSnapshot.id, 'json')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black">Скачать JSON</button>
+                <button @click="downloadSnapshot(selectedSnapshot.id, 'csv')" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black">Скачать CSV</button>
+              </div>
             </div>
           </div>
         </div>

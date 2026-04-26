@@ -49,6 +49,36 @@ def get_snapshot(
     return service.get_snapshot(snapshot_id)
 
 
+@router.get("/{snapshot_id}/export.json")
+def export_snapshot_json(
+    snapshot_id: int,
+    _: object = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    service = ScheduleSnapshotService(db)
+    content = service.export_json(snapshot_id)
+    return Response(
+        content=content,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="schedule_snapshot_{snapshot_id}.json"'},
+    )
+
+
+@router.get("/{snapshot_id}/export.csv")
+def export_snapshot_csv(
+    snapshot_id: int,
+    _: object = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    service = ScheduleSnapshotService(db)
+    content = service.export_csv(snapshot_id)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="schedule_snapshot_{snapshot_id}.csv"'},
+    )
+
+
 @router.post("/", response_model=ScheduleSnapshotRead, status_code=status.HTTP_201_CREATED)
 def create_snapshot(
     data: ScheduleSnapshotCreate,

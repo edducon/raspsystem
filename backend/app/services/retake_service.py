@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import PastSemester, Retake, RetakeAttemptRule, RetakeLeadTeacher, RetakeMeeting, RetakeTeacher, TeacherLocal, User
+from app.models import PastSemester, Retake, RetakeAttemptRule, RetakeLeadTeacher, RetakeMeeting, RetakeSubjectControl, RetakeTeacher, TeacherLocal, User
 from app.schemas.retake import MergedDayScheduleRequest, RetakeCreateRequest, RetakeFormContextRequest, RetakeUpdateRequest
 from app.services.raspyx_service import RaspyxService
 from app.services.reference_schedule_service import ReferenceScheduleService
@@ -16,6 +16,8 @@ from app.services.subject_matching import clean_subject_name, fuzzy_match, norma
 
 
 GROUP_NAME_NORMALIZER_RE = re.compile(r"[\s\u00A0]+")
+TEACHER_NAME_NORMALIZER_RE = re.compile(r"[\s\u00A0]+")
+CONTROL_TYPES = {"unspecified", "pass", "differentiated_pass", "exam"}
 
 
 class RetakeService:
@@ -66,7 +68,12 @@ class RetakeService:
         subject_blocked_reason = None
         assigned_attempts: list[int] = []
         next_attempt_number = 1
+        subject_control = {"control_type": "unspecified", "source": "default"}
         available_main_teacher_uuids: list[str] = []
+        main_teacher_options: list[dict] = []
+        auto_created_main_teacher_names: list[str] = []
+        unresolved_main_teacher_names: list[str] = []
+        main_teacher_department_required_names: list[str] = []
         if include_subject_data and payload.subject_uuid:
             subject_blocked_reason = self._get_subject_access_error(
                 user=user,
@@ -82,15 +89,24 @@ class RetakeService:
                 }
             )
             next_attempt_number = next((value for value in (1, 2, 3) if value not in assigned_attempts), 3)
+            subject_control = self._resolve_subject_control(
+                group_uuid=payload.group_uuid,
+                group_number=payload.group_number,
+                subject_name=selected_subject_name,
+            )
 
             if subject_blocked_reason is None:
-                available_main_teacher_uuids = self._available_main_teacher_uuids(
+                main_teacher_context = self._available_main_teacher_context(
                     user=user,
                     history_rows=history_rows,
-                    group_number=payload.group_number,
                     group_uuid=payload.group_uuid,
                     subject_uuid=payload.subject_uuid,
                 )
+                available_main_teacher_uuids = main_teacher_context["available_main_teacher_uuids"]
+                main_teacher_options = main_teacher_context["main_teacher_options"]
+                auto_created_main_teacher_names = main_teacher_context["auto_created_main_teacher_names"]
+                unresolved_main_teacher_names = main_teacher_context["unresolved_main_teacher_names"]
+                main_teacher_department_required_names = main_teacher_context["main_teacher_department_required_names"]
 
         main_teacher_lacks_dept = False
         available_commission_teacher_uuids: list[str] = []
@@ -107,12 +123,6 @@ class RetakeService:
             available_commission_teacher_uuids = commission_context["available_commission_teacher_uuids"]
             available_chairman_uuids = commission_context["available_chairman_uuids"]
             department_id = commission_context["department_id"]
-            if payload.subject_uuid:
-                available_meetings = self._list_meeting_candidates(
-                    date=None,
-                    department_id=department_id,
-                    teacher_uuids=payload.commission_teacher_uuids + ([payload.chairman_uuid] if payload.chairman_uuid else []),
-                )
 
         return {
             "group_history": group_history,
@@ -122,10 +132,15 @@ class RetakeService:
             "assigned_attempts": assigned_attempts,
             "next_attempt_number": next_attempt_number,
             "available_main_teacher_uuids": available_main_teacher_uuids,
+            "main_teacher_options": main_teacher_options,
+            "auto_created_main_teacher_names": auto_created_main_teacher_names,
+            "unresolved_main_teacher_names": unresolved_main_teacher_names,
+            "main_teacher_department_required_names": main_teacher_department_required_names,
             "available_commission_teacher_uuids": available_commission_teacher_uuids,
             "available_chairman_uuids": available_chairman_uuids,
             "available_meetings": available_meetings,
             "attempt_rules": self.list_attempt_rules(),
+            "subject_control": subject_control,
             "department_id": department_id,
             "main_teacher_lacks_dept": main_teacher_lacks_dept,
         }
@@ -151,6 +166,7 @@ class RetakeService:
                 "room": retake.room_uuid,
                 "link": self._effective_link(retake),
                 "attempt_number": retake.attempt_number,
+                "control_type": retake.control_type or "unspecified",
                 "my_role": role,
             }
             for retake, role in rows
@@ -165,6 +181,7 @@ class RetakeService:
         self._ensure_subject_access(user=user, data=data)
         self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
         self._ensure_attempt_is_available(data)
+        self._ensure_exam_day_is_available(data)
         meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
 
         retake = Retake(
@@ -177,6 +194,7 @@ class RetakeService:
             meeting_id=meeting.id if meeting is not None else None,
             department_id=department_id,
             attempt_number=data.attempt_number,
+            control_type=data.control_type,
             created_by=str(user.id),
         )
         self.db.add(retake)
@@ -188,6 +206,7 @@ class RetakeService:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
         if data.chairman_uuid:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=data.chairman_uuid, role="CHAIRMAN"))
+        self._remember_subject_control(data=data, user=user)
 
         self.db.commit()
 
@@ -214,6 +233,7 @@ class RetakeService:
         self._ensure_subject_access(user=user, data=data)
         self._ensure_teacher_access(user=user, data=data, teacher_map=teacher_map, department_id=department_id)
         self._ensure_attempt_is_available(data, exclude_retake_id=retake_id)
+        self._ensure_exam_day_is_available(data, exclude_retake_id=retake_id)
         meeting = self._resolve_or_create_meeting(data=data, user=user, department_id=department_id)
 
         retake.group_uuid = data.group_uuid
@@ -225,6 +245,7 @@ class RetakeService:
         retake.meeting_id = meeting.id if meeting is not None else None
         retake.department_id = department_id
         retake.attempt_number = data.attempt_number
+        retake.control_type = data.control_type
 
         self.db.execute(delete(RetakeLeadTeacher).where(RetakeLeadTeacher.retake_id == retake_id))
         self.db.execute(delete(RetakeTeacher).where(RetakeTeacher.retake_id == retake_id))
@@ -235,6 +256,7 @@ class RetakeService:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=teacher_uuid, role="COMMISSION"))
         if data.chairman_uuid:
             self.db.add(RetakeTeacher(retake_id=retake.id, teacher_uuid=data.chairman_uuid, role="CHAIRMAN"))
+        self._remember_subject_control(data=data, user=user)
 
         self.db.commit()
 
@@ -477,6 +499,7 @@ class RetakeService:
             "meeting_id": retake.meeting_id,
             "department_id": retake.department_id,
             "attempt_number": retake.attempt_number,
+            "control_type": retake.control_type or "unspecified",
             "created_by": retake.created_by,
             "created_at": retake.created_at,
             "can_delete": self._can_delete(retake, viewer),
@@ -520,9 +543,11 @@ class RetakeService:
         department_id: int | None,
         teacher_uuids: list[str],
     ) -> list[dict]:
+        if not date:
+            return []
+
         query = select(RetakeMeeting).options(selectinload(RetakeMeeting.retakes))
-        if date:
-            query = query.where(RetakeMeeting.date == date)
+        query = query.where(RetakeMeeting.date == date)
         if department_id is not None:
             query = query.where(RetakeMeeting.department_id == department_id)
 
@@ -594,6 +619,8 @@ class RetakeService:
     def _validate_create_payload(self, data: RetakeCreateRequest) -> None:
         if data.attempt_number not in {1, 2, 3}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Номер попытки должен быть от 1 до 3.")
+        if data.control_type not in CONTROL_TYPES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный тип контроля.")
         rule = self._attempt_rule_for(data.attempt_number)
         if rule.requires_chairman and not data.chairman_uuid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для выбранной попытки нужно выбрать председателя комиссии.")
@@ -701,6 +728,93 @@ class RetakeService:
                 continue
             if normalize_for_compare(self._resolve_subject_name_safe(retake.subject_uuid)) == normalize_for_compare(selected_subject_name):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Эта попытка уже назначена.")
+
+    def _ensure_exam_day_is_available(self, data: RetakeCreateRequest, exclude_retake_id: str | None = None) -> None:
+        if data.control_type != "exam":
+            return
+        candidates = self.db.scalars(
+            select(Retake).where(
+                Retake.group_uuid == data.group_uuid,
+                Retake.date == data.date,
+                Retake.control_type == "exam",
+            )
+        ).all()
+        for retake in candidates:
+            if exclude_retake_id is not None and retake.id == exclude_retake_id:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="У этой группы уже назначен экзамен на выбранную дату.",
+            )
+
+    def _subject_key(self, subject_name: str) -> str:
+        return normalize_for_compare(subject_name)
+
+    def _group_family_key(self, group_number: str) -> str | None:
+        normalized = str(group_number or "").strip()
+        if "-" not in normalized:
+            return None
+        return normalized.split("-", 1)[1].strip() or None
+
+    def _resolve_subject_control(self, group_uuid: str, group_number: str, subject_name: str) -> dict:
+        subject_key = self._subject_key(subject_name)
+        if not subject_key:
+            return {"control_type": "unspecified", "source": "default"}
+
+        exact = self.db.scalar(
+            select(RetakeSubjectControl).where(
+                RetakeSubjectControl.group_uuid == group_uuid,
+                RetakeSubjectControl.subject_key == subject_key,
+            )
+        )
+        if exact is not None:
+            return {"control_type": exact.control_type, "source": "exact"}
+
+        family_key = self._group_family_key(group_number)
+        if family_key:
+            family_match = self.db.scalar(
+                select(RetakeSubjectControl)
+                .where(
+                    RetakeSubjectControl.group_family_key == family_key,
+                    RetakeSubjectControl.subject_key == subject_key,
+                )
+                .order_by(RetakeSubjectControl.updated_at.desc(), RetakeSubjectControl.id.desc())
+                .limit(1)
+            )
+            if family_match is not None:
+                return {"control_type": family_match.control_type, "source": "group_family"}
+
+        return {"control_type": "unspecified", "source": "default"}
+
+    def _remember_subject_control(self, data: RetakeCreateRequest, user: User) -> None:
+        if data.control_type not in CONTROL_TYPES:
+            return
+        subject_name = self._resolve_subject_name(data.subject_uuid)
+        subject_key = self._subject_key(subject_name)
+        if not subject_key:
+            return
+
+        existing = self.db.scalar(
+            select(RetakeSubjectControl).where(
+                RetakeSubjectControl.group_uuid == data.group_uuid,
+                RetakeSubjectControl.subject_key == subject_key,
+            )
+        )
+        if existing is None:
+            existing = RetakeSubjectControl(
+                group_uuid=data.group_uuid,
+                group_number=data.group_number,
+                group_family_key=self._group_family_key(data.group_number),
+                subject_key=subject_key,
+                subject_name=subject_name,
+            )
+            self.db.add(existing)
+
+        existing.group_number = data.group_number
+        existing.group_family_key = self._group_family_key(data.group_number)
+        existing.subject_name = subject_name
+        existing.control_type = data.control_type
+        existing.updated_by = str(user.id)
 
     def _ensure_subject_access(self, user: User, data: RetakeCreateRequest) -> None:
         error_message = self._get_subject_access_error(user=user, group_number=data.group_number, subject_uuid=data.subject_uuid)
@@ -959,39 +1073,134 @@ class RetakeService:
                 result.add(subject_name)
         return result
 
-    def _available_main_teacher_uuids(
+    def _available_main_teacher_context(
         self,
         user: User,
         history_rows: list[PastSemester],
-        group_number: str,
-        group_uuid: str,
         subject_uuid: str,
-    ) -> list[str]:
+    ) -> dict[str, object]:
         subject_name = self._resolve_subject_name(subject_uuid)
         matching_rows = self._match_history_rows(history_rows=history_rows, subject_name=subject_name)
-        history_teacher_names = sorted({teacher_name for row in matching_rows for teacher_name in (row.teacher_names or [])})
+        history_teacher_names = self._unique_teacher_names([
+            teacher_name
+            for row in matching_rows
+            for teacher_name in (row.teacher_names or [])
+        ])
 
-        teacher_name_sources: list[list[str]] = []
-        if history_teacher_names:
-            teacher_name_sources.append(history_teacher_names)
+        if not history_teacher_names:
+            return {
+                "available_main_teacher_uuids": [],
+                "main_teacher_options": [],
+                "auto_created_main_teacher_names": [],
+                "unresolved_main_teacher_names": [],
+                "main_teacher_department_required_names": [],
+            }
 
-        if self.reference_schedule.has_reference_snapshot():
-            snapshot_teacher_names = self.reference_schedule.get_group_subject_teacher_names(group_uuid, subject_uuid)
-            if snapshot_teacher_names:
-                teacher_name_sources.append(snapshot_teacher_names)
-
-        teachers: list[TeacherLocal] = []
-        for teacher_names in teacher_name_sources:
-            teachers = self._load_teachers_by_names(teacher_names)
-            if teachers:
-                break
-        if not teachers:
-            return []
+        teacher_result = self._load_or_create_teachers_by_names(history_teacher_names, user=user)
+        teachers: list[TeacherLocal] = teacher_result["teachers"]
 
         if user.role != "ADMIN":
             user_departments = set(user.department_ids or [])
             teachers = [teacher for teacher in teachers if user_departments.intersection(set(teacher.department_ids or []))]
-        return [teacher.uuid for teacher in teachers]
+        return {
+            "available_main_teacher_uuids": [teacher.uuid for teacher in teachers],
+            "main_teacher_options": [self._serialize_teacher_option(teacher) for teacher in teachers],
+            "auto_created_main_teacher_names": teacher_result["auto_created_names"],
+            "unresolved_main_teacher_names": teacher_result["unresolved_names"],
+            "main_teacher_department_required_names": teacher_result["department_required_names"],
+        }
+
+    def _serialize_teacher_option(self, teacher: TeacherLocal) -> dict:
+        return {
+            "uuid": teacher.uuid,
+            "full_name": teacher.full_name,
+            "department_ids": list(teacher.department_ids or []),
+        }
+
+    def _unique_teacher_names(self, teacher_names: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for teacher_name in teacher_names:
+            normalized_name = self._normalize_teacher_name(teacher_name)
+            comparable_name = self._normalize_teacher_for_compare(normalized_name)
+            if not normalized_name or comparable_name in seen:
+                continue
+            seen.add(comparable_name)
+            result.append(normalized_name)
+        return sorted(result, key=lambda value: value.casefold())
+
+    def _normalize_teacher_name(self, teacher_name: str) -> str:
+        return TEACHER_NAME_NORMALIZER_RE.sub(" ", str(teacher_name or "")).strip()
+
+    def _normalize_teacher_for_compare(self, teacher_name: str) -> str:
+        return self._normalize_teacher_name(teacher_name).replace("ё", "е").casefold()
+
+    def _auto_teacher_department_id(self, user: User) -> int | None:
+        user_departments = sorted(set(user.department_ids or []))
+        return user_departments[0] if len(user_departments) == 1 else None
+
+    def _load_or_create_teachers_by_names(self, teacher_names: list[str], user: User) -> dict[str, object]:
+        normalized_names = [self._normalize_teacher_name(name) for name in teacher_names]
+        normalized_names = [name for name in normalized_names if name]
+        if not normalized_names:
+            return {
+                "teachers": [],
+                "auto_created_names": [],
+                "unresolved_names": [],
+                "department_required_names": [],
+            }
+
+        pool = list(self.db.scalars(select(TeacherLocal).order_by(TeacherLocal.full_name.asc())).all())
+        teachers_by_name = {
+            self._normalize_teacher_for_compare(teacher.full_name): teacher
+            for teacher in pool
+        }
+        department_id = self._auto_teacher_department_id(user)
+
+        teachers: list[TeacherLocal] = []
+        auto_created_names: list[str] = []
+        unresolved_names: list[str] = []
+        department_required_names: list[str] = []
+        created_or_updated = False
+
+        for teacher_name in normalized_names:
+            comparable_name = self._normalize_teacher_for_compare(teacher_name)
+            teacher = teachers_by_name.get(comparable_name)
+            if teacher is None:
+                if department_id is None:
+                    department_required_names.append(teacher_name)
+                    unresolved_names.append(teacher_name)
+                    continue
+                teacher_uuid = str(uuid5(NAMESPACE_URL, f"teacher-local:{comparable_name}"))
+                teacher = self.db.get(TeacherLocal, teacher_uuid)
+                if teacher is None:
+                    teacher = TeacherLocal(
+                        uuid=teacher_uuid,
+                        full_name=teacher_name,
+                        department_ids=[department_id],
+                    )
+                    self.db.add(teacher)
+                    auto_created_names.append(teacher_name)
+                    created_or_updated = True
+                teachers_by_name[comparable_name] = teacher
+
+            if not teacher.department_ids and department_id is not None:
+                teacher.department_ids = [department_id]
+                created_or_updated = True
+                if teacher_name not in auto_created_names:
+                    auto_created_names.append(teacher_name)
+
+            teachers.append(teacher)
+
+        if created_or_updated:
+            self.db.commit()
+
+        return {
+            "teachers": teachers,
+            "auto_created_names": sorted(set(auto_created_names), key=lambda value: value.casefold()),
+            "unresolved_names": sorted(set(unresolved_names), key=lambda value: value.casefold()),
+            "department_required_names": sorted(set(department_required_names), key=lambda value: value.casefold()),
+        }
 
     def _get_live_group_subject_teacher_names(self, group_number: str, subject_name: str) -> list[str]:
         if self.reference_schedule.has_reference_snapshot():
@@ -1009,7 +1218,7 @@ class RetakeService:
         return sorted(teacher_names)
 
     def _load_teachers_by_names(self, teacher_names: list[str]) -> list[TeacherLocal]:
-        normalized_names = {normalize_for_compare(name) for name in teacher_names if name}
+        normalized_names = {self._normalize_teacher_for_compare(name) for name in teacher_names if name}
         if not normalized_names:
             return []
 
@@ -1017,7 +1226,7 @@ class RetakeService:
         result: list[TeacherLocal] = []
         seen_uuids: set[str] = set()
         for teacher in pool:
-            if normalize_for_compare(teacher.full_name) not in normalized_names:
+            if self._normalize_teacher_for_compare(teacher.full_name) not in normalized_names:
                 continue
             if teacher.uuid in seen_uuids:
                 continue

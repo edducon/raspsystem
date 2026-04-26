@@ -58,6 +58,12 @@ function buildJsonInit(init: RequestInit = {}): RequestInit {
   };
 }
 
+function buildBackendUrl(backendApiUrl: string, path: string): string {
+  const base = backendApiUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
+}
+
 function getBrowserCsrfToken(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -87,13 +93,37 @@ export async function fetchBackendFromBrowser<T>(
     }
   }
 
-  const response = await fetch(`${backendApiUrl}${path}`, {
+  const response = await fetch(buildBackendUrl(backendApiUrl, path), {
     ...preparedInit,
     headers,
     credentials: "include",
   });
 
   return parseBackendResponse<T>(response, "Не удалось выполнить запрос к серверу.");
+}
+
+export async function fetchBackendBlobFromBrowser(
+  backendApiUrl: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Blob> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "*/*");
+  }
+
+  const response = await fetch(buildBackendUrl(backendApiUrl, path), {
+    ...init,
+    headers,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new BackendApiError(response.status, extractErrorDetail(payload, "Не удалось скачать файл."));
+  }
+
+  return response.blob();
 }
 
 export async function fetchBackendFromServer<T>(

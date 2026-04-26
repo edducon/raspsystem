@@ -27,6 +27,7 @@ class Retake(Base):
     )
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
     attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    control_type: Mapped[str] = mapped_column(String(32), default="unspecified", server_default="unspecified", index=True)
     created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), server_default=text("now()"))
 
