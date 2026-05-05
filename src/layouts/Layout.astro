@@ -970,6 +970,36 @@ const csrfToken = Astro.locals.csrfToken ?? "";
     html.dark .login-btn {
         border: 1px solid #fff !important;
     }
+    .login-icon-btn {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .login-icon {
+        width: 46px;
+        height: 46px;
+        transition: filter 0.2s ease;
+    }
+
+    .login-icon {
+        filter: invert(0);
+    }
+
+    html.dark .login-icon {
+        filter: invert(1);
+    }
+
+    .login-icon-btn:hover {
+        transform: translateY(-2px) scale(1.06);
+        opacity: 0.8;
+    }
 </style>
 </body>
 </html>
