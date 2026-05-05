@@ -452,7 +452,11 @@ function toIsoDate(date: Date) {
                   </div>
                 </div>
 
-                <div v-else class="relative flex h-full flex-col justify-between gap-5">
+                <div
+                    v-else
+                    :key="`${subjectGroup.subjectName}-${retake.id}`"
+                    class="relative flex h-full animate-retake-open flex-col justify-between gap-5"
+                >
                   <div>
                     <div class="mb-4 flex flex-wrap items-center gap-2">
                       <span
@@ -611,4 +615,24 @@ function toIsoDate(date: Date) {
       </aside>
     </div>
   </div>
+
 </template>
+<style scoped>
+@keyframes retakeOpen {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.animate-retake-open {
+  animation: retakeOpen 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+</style>
