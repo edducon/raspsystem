@@ -11,7 +11,6 @@ import {
   ChevronRight,
 } from 'lucide-vue-next';
 import { getDateLabel, daysUntil } from '../lib/dateUtils';
-import { useRecentGroups } from '../composables/useRecentGroups';
 import {
   formatGroupValue,
   matchesGroupQuery,
@@ -31,7 +30,6 @@ const showGroupDropdown = ref(false);
 const selectedDateFilter = ref('');
 const activeAttemptBySubject = ref<Record<string, string | number>>({});
 
-const { recentGroups, addRecentGroup, clearRecentGroups } = useRecentGroups();
 
 const baseDate = props.today ? new Date(props.today) : new Date();
 const openMonth = ref(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1));
@@ -197,7 +195,6 @@ function selectGroup(group: { uuid: string; number: string }) {
   showGroupDropdown.value = false;
   selectedDateFilter.value = '';
   activeAttemptBySubject.value = {};
-  addRecentGroup(group);
 
   const firstDate = studentRetakes.value[0]?.date;
 
@@ -349,30 +346,9 @@ function toIsoDate(date: Date) {
             </div>
 
             <div
-                v-if="showGroupDropdown && (filteredGroups.length > 0 || (recentGroups.length > 0 && !groupSearchQuery))"
+                v-if="showGroupDropdown && filteredGroups.length > 0"
                 class="relative z-30 mt-3 max-h-80 overflow-y-auto rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] shadow-[var(--panel-shadow)]"
             >
-              <div v-if="recentGroups.length > 0 && !groupSearchQuery" class="border-b border-[var(--panel-border)]">
-                <div class="flex items-center justify-between px-4 py-3">
-                  <span class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Недавние группы</span>
-                  <button
-                      @click.stop="clearRecentGroups"
-                      class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-[var(--accent-strong)]"
-                  >
-                    Очистить
-                  </button>
-                </div>
-
-                <div
-                    v-for="group in recentGroups"
-                    :key="`recent-${group.uuid}`"
-                    @click="selectGroup(group)"
-                    class="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--panel-muted)] dark:text-slate-200"
-                >
-                  <Clock class="h-4 w-4 shrink-0 text-slate-400" />
-                  <span>{{ group.number }}</span>
-                </div>
-              </div>
 
               <div
                   v-for="group in filteredGroups"
@@ -382,16 +358,6 @@ function toIsoDate(date: Date) {
               >
                 {{ group.number }}
               </div>
-            </div>
-
-            <div v-if="selectedGroupUuid" class="mt-4 flex items-center justify-end">
-              <button
-                  @click="clearSelectedGroup"
-                  class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
-              >
-                <X class="h-4 w-4" />
-                Сменить группу
-              </button>
             </div>
           </div>
 
@@ -489,13 +455,6 @@ function toIsoDate(date: Date) {
                 <div v-else class="relative flex h-full flex-col justify-between gap-5">
                   <div>
                     <div class="mb-4 flex flex-wrap items-center gap-2">
-                      <span
-                          class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
-                          :class="getStatusTone(retake.daysDelta)"
-                      >
-                        {{ getStatusText(retake.daysDelta) }}
-                      </span>
-
                       <span
                           class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
                           :class="getAttemptTone(retake.attemptNumber || 1)"
