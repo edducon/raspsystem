@@ -1010,10 +1010,10 @@ const saveMeetingLink = async () => {
 </script>
 
 <template>
-  <div class="relative z-10 rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--panel-shadow)] overflow-hidden transition-colors">
+  <div class="relative z-10 rounded-[24px] border border-[var(--panel-border)] bg-white shadow-[var(--panel-shadow)] overflow-hidden transition-colors dark:bg-[#11161c]">
     <!-- Header -->
     <div class="px-5 py-5 sm:px-6 sm:py-6 border-b border-[var(--panel-border)] flex items-center gap-4">
-      <div class="w-12 h-12 rounded-[16px] bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] flex items-center justify-center shrink-0">
+      <div class="w-12 h-12 rounded-[16px] bg-white dark:bg-[#11161c] border border-[var(--panel-border)] flex items-center justify-center shrink-0">
         <Calendar class="w-5 h-5 text-[var(--accent-strong)]" />
       </div>
 
@@ -1044,7 +1044,7 @@ const saveMeetingLink = async () => {
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <!-- Group -->
         <div class="relative">
-          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
             Группа
           </label>
 
@@ -1055,21 +1055,20 @@ const saveMeetingLink = async () => {
                 @input="handleGroupInput"
                 type="text"
                 placeholder="Номер группы..."
-                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 pr-10 text-sm font-semibold bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
+                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 pr-10 text-sm font-semibold bg-white dark:bg-[#11161c] dark:text-white outline-none transition-all"
             />
             <ChevronDown class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
 
           <div
               v-if="showGroupDropdown && filteredGroups.length > 0"
-              class="absolute z-20 w-full mt-2 max-h-60 overflow-y-auto bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)]"
+              class="relative z-30 mt-3 max-h-80 overflow-y-auto rounded-[22px] border border-[var(--panel-border)] bg-white dark:bg-[#0b1120] shadow-[var(--panel-shadow)]"
           >
             <div
                 v-for="g in filteredGroups"
                 :key="g.uuid"
                 @click="selectGroup(g)"
-                class="px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer text-sm text-slate-700 dark:text-slate-200 font-semibold transition-colors"
-            >
+                class="px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer text-sm text-slate-700 dark:text-slate-200 font-semibold transition-colors"            >
               {{ g.number }}
             </div>
           </div>
@@ -1079,7 +1078,7 @@ const saveMeetingLink = async () => {
 
         <!-- Subject -->
         <div class="relative">
-          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
             Дисциплина
           </label>
 
@@ -1087,11 +1086,10 @@ const saveMeetingLink = async () => {
               type="button"
               :disabled="!selectedGroupUuid || isLoadingFormContext"
               @click="(!selectedGroupUuid || isLoadingFormContext) ? null : showSubjectDropdown = !showSubjectDropdown"
-              class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none disabled:opacity-50 transition-all flex items-center justify-between gap-3 text-left"
-          >
+              class="normal-case tracking-normal w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-white dark:bg-[#11161c] dark:text-white outline-none disabled:opacity-50 transition-all flex items-center justify-between gap-3 text-left"          >
             <span
-                class="truncate"
-                :class="selectedSubjectOption ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'"
+                class="form-field-text truncate normal-case tracking-normal"
+                :class="selectedSubjectOption ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'"
             >
               {{
                 selectedSubjectOption?.name
@@ -1111,7 +1109,7 @@ const saveMeetingLink = async () => {
 
           <div
               v-if="showSubjectDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-72 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-72 flex flex-col bg-white dark:bg-[#11161c] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
           >
             <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
               <div class="relative">
@@ -1187,7 +1185,7 @@ const saveMeetingLink = async () => {
 
         <!-- Date -->
         <div>
-          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+          <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
             Дата
           </label>
 
@@ -1195,7 +1193,7 @@ const saveMeetingLink = async () => {
               type="date"
               v-model="selectedDate"
               :disabled="!selectedSubject"
-              class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark] transition-all"
+              class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-white dark:bg-[#11161c] dark:text-white outline-none disabled:opacity-50 [color-scheme:light] dark:[color-scheme:dark] transition-all"
           />
         </div>
       </div>
@@ -1208,7 +1206,7 @@ const saveMeetingLink = async () => {
         <Info class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
 
         <div class="w-full">
-          <h4 class="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-[0.18em] mb-3">
+          <h4 class="text-[11px] font-bold text-amber-800 dark:text-amber-400 tracking-[0.18em] mb-3">
             Уже назначенные пересдачи
           </h4>
 
@@ -1263,7 +1261,7 @@ const saveMeetingLink = async () => {
               v-if="editingMeetingId"
               class="mt-3 rounded-2xl border border-amber-200/70 bg-white/70 p-3 dark:border-amber-500/10 dark:bg-black/20"
           >
-            <label class="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">
+            <label class="mb-2 block text-[11px] font-bold tracking-[0.18em] text-amber-800 dark:text-amber-300">
               Ссылка онлайн-встречи
             </label>
             <div class="flex flex-col gap-2 sm:flex-row">
@@ -1271,7 +1269,7 @@ const saveMeetingLink = async () => {
                   v-model="editingMeetingLink"
                   type="url"
                   placeholder="Вставьте ссылку для подключения"
-                  class="min-w-0 flex-1 rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
+                  class="min-w-0 flex-1 rounded-xl border border-[var(--panel-border)] bg-white dark:bg-[#11161c] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] dark:text-white"
               />
               <button
                   @click="saveMeetingLink"
@@ -1406,7 +1404,7 @@ const saveMeetingLink = async () => {
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 p-5 sm:p-6 bg-slate-50/80 dark:bg-black/10 rounded-[24px] border border-slate-100 dark:border-white/10">
           <!-- Format -->
           <div>
-            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
+            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 tracking-[0.18em]">
               Формат проведения
             </h4>
 
@@ -1439,11 +1437,11 @@ const saveMeetingLink = async () => {
                 v-model="roomUuid"
                 type="text"
                 placeholder="Аудитория (А-414)"
-                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
+                class="w-full h-12 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-white dark:bg-[#11161c] dark:text-white outline-none transition-all"
             />
 
             <div v-else class="space-y-3">
-              <label class="mb-2 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              <label class="mb-2 block text-[11px] font-bold tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Онлайн-встреча
               </label>
 
@@ -1473,14 +1471,14 @@ const saveMeetingLink = async () => {
                         @click.stop
                         type="url"
                         placeholder="Вставьте ссылку, если она уже есть"
-                        class="mt-3 w-full h-11 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-[var(--panel-bg-strong)] dark:text-white outline-none transition-all"
+                        class="mt-3 w-full h-11 rounded-2xl border border-[var(--panel-border)] focus:border-[var(--accent)] px-4 text-sm bg-white dark:bg-[#11161c] dark:text-white outline-none transition-all"
                     />
                   </div>
                 </div>
               </label>
 
               <div v-if="meetingOptions.length > 0" class="space-y-2">
-                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                <div class="text-[11px] font-bold tracking-[0.18em] text-slate-500 dark:text-slate-400">
                   Уже созданные встречи на эту дату
                 </div>
 
@@ -1542,7 +1540,7 @@ const saveMeetingLink = async () => {
 
           <!-- Control type -->
           <div>
-            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
+            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 tracking-[0.18em]">
               Тип контроля
             </h4>
 
@@ -1587,7 +1585,7 @@ const saveMeetingLink = async () => {
 
           <!-- Attempt -->
           <div>
-            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-[0.18em]">
+            <h4 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3 tracking-[0.18em]">
               Номер попытки
             </h4>
 
@@ -1665,7 +1663,7 @@ const saveMeetingLink = async () => {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
             <!-- Main teacher -->
             <div class="relative">
-              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
                 Ведущий
                 <span v-if="availableMainTeachers.length === 0 && selectedSubject && !subjectBelongsToAnotherDept" class="text-amber-500 normal-case tracking-normal">
                   (можно выбрать вручную)
@@ -1696,7 +1694,7 @@ const saveMeetingLink = async () => {
 
               <div
                   v-if="showMainDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white dark:bg-[#11161c] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1740,7 +1738,7 @@ const saveMeetingLink = async () => {
 
             <!-- Chairman -->
             <div class="relative">
-              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
                 Председатель
                 <span v-if="currentAttemptRule.requiresChairman" class="text-red-500">*</span>
               </label>
@@ -1769,7 +1767,7 @@ const saveMeetingLink = async () => {
 
               <div
                   v-if="showChairmanDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white dark:bg-[#11161c] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1789,8 +1787,7 @@ const saveMeetingLink = async () => {
                       v-for="t in displayChairmen"
                       :key="t.uuid"
                       @click="selectChairman(t.uuid)"
-                      class="px-4 py-3 hover:bg-[var(--panel-muted)] cursor-pointer text-sm text-slate-700 dark:text-slate-200 transition-colors"
-                  >
+                      class="px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer text-sm text-slate-700 dark:text-slate-200 font-semibold transition-colors"                  >
                     {{ t.fullName }}
                   </div>
 
@@ -1805,7 +1802,7 @@ const saveMeetingLink = async () => {
 
             <!-- Commission members -->
             <div class="relative">
-              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-[0.18em]">
+              <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 tracking-[0.18em]">
                 Члены комиссии
                 <span v-if="currentAttemptRule.minCommissionMembers > 0" class="text-red-500">*</span>
               </label>
@@ -1835,7 +1832,7 @@ const saveMeetingLink = async () => {
 
               <div
                   v-if="showCommDropdown"
-                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-[var(--panel-bg-strong)] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
+                  class="absolute z-20 w-full mt-2 max-h-64 flex flex-col bg-white dark:bg-[#11161c] border border-[var(--panel-border)] rounded-[20px] shadow-[var(--panel-shadow)] overflow-hidden"
               >
                 <div class="p-2 border-b border-slate-100 dark:border-white/10 shrink-0">
                   <div class="relative">
@@ -1879,7 +1876,7 @@ const saveMeetingLink = async () => {
         <button
             v-if="editingRetakeId"
             @click="cancelRetakeEdit"
-            class="h-12 px-6 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg-strong)] text-sm font-bold text-slate-700 hover:border-[var(--panel-border-strong)] dark:text-slate-200 transition-all"
+            class="h-12 px-6 rounded-2xl border border-[var(--panel-border)] bg-white dark:bg-[#11161c] text-sm font-bold text-slate-700 hover:border-[var(--panel-border-strong)] dark:text-slate-200 transition-all"
         >
           Отменить
         </button>
@@ -1913,6 +1910,31 @@ const saveMeetingLink = async () => {
 
 .scheduler-step-commission {
   order: 1;
+}
+:deep(button),
+:deep(input),
+:deep(label),
+:deep(span),
+:deep(div) {
+  text-transform: none;
+}
+
+:deep(input),
+:deep(button),
+:deep(.form-field-text) {
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
+:deep(label) {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+:deep(h2),
+:deep(h3),
+:deep(h4) {
+  letter-spacing: -0.02em;
 }
 </style>
 
