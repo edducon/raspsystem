@@ -43,8 +43,8 @@ class Settings(BaseSettings):
 
     redis_host: str = Field(default="redis", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
-    raspyx_api_base_url: str = Field(default="https://zefixed.ru/raspyx/api/v2", alias="RASPYX_API_BASE_URL")
-    raspyx_auth_url: str = Field(default="https://zefixed.ru/auth/api/v1/login", alias="RASPYX_AUTH_URL")
+    raspyx_api_base_url: str = Field(default="http://89.39.121.218:8085/raspyx/api/v2", alias="RASPYX_API_BASE_URL")
+    raspyx_auth_url: str = Field(default="http://89.39.121.218:8081/auth/api/v1/login", alias="RASPYX_AUTH_URL")
     raspyx_username: str = Field(default="username", alias="RASPYX_USERNAME")
     raspyx_password: str = Field(default="password=", alias="RASPYX_PASSWORD")
 

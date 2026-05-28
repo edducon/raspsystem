@@ -17,8 +17,17 @@ export interface BackendSessionState {
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
+function getDefaultPublicBackendApiUrl(): string {
+    return import.meta.env.APP_ENV === "production" ? "/api" : "http://localhost:8000/api";
+}
+
 export function getPublicBackendApiUrl(): string {
-    return stripTrailingSlash(import.meta.env.BACKEND_API_URL ?? "http://localhost:8000/api");
+    const configuredUrl = stripTrailingSlash(import.meta.env.BACKEND_API_URL ?? getDefaultPublicBackendApiUrl());
+    if (/\/raspyx\/api(?:\/|$)/i.test(configuredUrl)) {
+        console.warn("BACKEND_API_URL points to Raspyx; falling back to the application backend API.");
+        return getDefaultPublicBackendApiUrl();
+    }
+    return configuredUrl;
 }
 
 export function getServerBackendApiUrl(): string {

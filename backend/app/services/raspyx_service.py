@@ -55,7 +55,7 @@ class RaspyxService:
             if cached is not None and cached[0] > now:
                 return cached[1]
 
-            payload = self._load_json(f"{settings.raspyx_api_base_url}{endpoint}")
+            payload = self._load_json(f"{settings.raspyx_api_base_url.rstrip('/')}{endpoint}")
             self.__class__._response_cache[endpoint] = (now + self._cache_ttl_seconds, payload)
             return payload
 
