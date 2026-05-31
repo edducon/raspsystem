@@ -99,7 +99,6 @@ class RetakeService:
                 main_teacher_context = self._available_main_teacher_context(
                     user=user,
                     history_rows=history_rows,
-                    group_uuid=payload.group_uuid,
                     subject_uuid=payload.subject_uuid,
                 )
                 available_main_teacher_uuids = main_teacher_context["available_main_teacher_uuids"]
